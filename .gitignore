@@ -1,0 +1,4 @@
+dist/
+.DS_Store
+*.pem
+bcm_updates_deploy*

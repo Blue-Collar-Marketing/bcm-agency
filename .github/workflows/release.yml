@@ -1,0 +1,87 @@
+# Builds and publishes a BCM Agency Tools release when a version tag is pushed.
+#
+#   git tag v1.3.0 && git push origin v1.3.0
+#
+# 1. build:   checks versions, lints PHP, builds the zip and info.json (no secrets).
+# 2. publish: waits for a second person to approve in the "updates" environment,
+#             then copies the files to the public updates repo (GitHub Pages).
+#
+# Sites only see the new version once publish finishes. Rolling it out to sites
+# is a separate, deliberate step (Cloudways WP Manager, in waves).
+
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release
+        run: python3 scripts/build_release.py "${GITHUB_REF_NAME#v}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    # Required reviewer is set on this environment in repo Settings → Environments.
+    # The deploy key below only exists inside this environment, so nothing can
+    # publish without that approval.
+    environment: updates
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: dist/
+
+      - name: Publish to the updates site
+        env:
+          DEPLOY_KEY: ${{ secrets.UPDATES_DEPLOY_KEY }}
+          UPDATES_REPO: ${{ vars.UPDATES_REPO }}   # e.g. your-org/bcm-agency-updates
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KEY"   || { echo "UPDATES_DEPLOY_KEY secret is missing in the 'updates' environment"; exit 1; }
+          test -n "$UPDATES_REPO" || { echo "UPDATES_REPO variable is missing"; exit 1; }
+
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes"
+
+          git clone --depth 1 "git@github.com:${UPDATES_REPO}.git" site
+          mkdir -p site/bcm-agency
+          # Keep older zips (handy for rollback); replace info.json so sites see the new version.
+          cp dist/bcm-agency/*.zip site/bcm-agency/
+          cp dist/bcm-agency/info.json site/bcm-agency/info.json
+
+          cd site
+          git config user.name  "BCM Release Bot"
+          git config user.email "release-bot@users.noreply.github.com"
+          git add bcm-agency
+          git commit -m "BCM Agency Tools ${VERSION}" || { echo "Nothing changed"; exit 0; }
+          git push origin HEAD
+
+          echo "Published ${VERSION}. Sites will see it within about 12 hours, or immediately with 'Check again' on Dashboard → Updates."
+
+      - name: Remove key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
