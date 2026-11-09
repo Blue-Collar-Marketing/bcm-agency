@@ -137,7 +137,7 @@ function bcm_agency_register_site_abilities() {
 			),
 			'execute_callback'    => 'bcm_agency_purge_cache_ability',
 			'permission_callback' => function () {
-				return current_user_can( 'edit_posts' );
+				return current_user_can( 'edit_others_posts' ); // Editors and admins only.
 			},
 		)
 	);
