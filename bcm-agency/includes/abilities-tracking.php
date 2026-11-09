@@ -2,7 +2,7 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Known tracking/verification services. Claude passes the ID (or whatever the
+ * Known tracking/verification services. The caller passes the ID (or whatever the
  * PM pasted); we extract the ID with a strict pattern and generate the official
  * code ourselves. Pasted markup is never stored.
  */
