@@ -1,4 +1,4 @@
-# BCM Agency Tools (v1.2.2)
+# BCM Agency Tools (v1.3.0)
 
 Narrow, logged abilities that let Blue Collar Marketing's Claude workflows handle blog posts, images and site identity on client WordPress sites. They appear in Claude automatically through the site's existing WordPress connector (WordPress 6.9+ Abilities API + MCP Adapter). Nothing changes on the Claude side.
 
@@ -19,7 +19,11 @@ Narrow, logged abilities that let Blue Collar Marketing's Claude workflows handl
 | `bcm/add-tracking-code` | Adds one of those services to WPCode's Header & Footer fields as a marked `<!-- BCM:start … -->` block, appended after existing code. Needs `approved: true`; refuses duplicates; reports whether it's live. | manage_options |
 | `bcm/get-site-identity` | Reads site title, tagline, timezone. | edit_posts |
 | `bcm/update-site-identity` | Sets site title and/or tagline. | manage_options |
-| `bcm/purge-page-cache` | Clears Breeze/Varnish and other page caches so changes show. | edit_posts |
+| `bcm/purge-page-cache` | Clears Breeze/Varnish and other page caches so changes show. | edit_others_posts (Editor+) |
+| `bcm/find-text` | Read-only. Finds text, or a phone number in any format, across Elementor content of every version (classic, containers, Atomic), headers/footers/popups/global widgets, and normal posts/pages. | edit_pages |
+| `bcm/replace-text` | Replaces it in the posts the person approved (`post_ids` + `approved: true`). Visible text only; tel: links keep their format; revision per page; Elementor styles rebuilt; caches cleared. | edit_pages + edit_others_posts |
+| `bcm/list-forms` | Read-only. Every Elementor form (pages, popups, headers, footers) with Email / Email 2 recipients, each labelled "business" or "submitter" (thank-you). | edit_pages |
+| `bcm/update-form-email` | Changes To/CC/BCC of the action that notifies the business (auto-detected, Email or Email 2). The submitter thank-you is never changed. Needs `approved: true`. | edit_pages + edit_others_posts |
 | `bcm/get-activity-log` | Recent BCM actions on this site. | manage_options |
 
 SEO title and meta description stay with Yoast's own ability (`yoast-seo/update-post-seo-data`). Yoast's ability can't set the focus keyphrase, so `create-post` / `update-post` handle it.
@@ -67,6 +71,7 @@ SEO title and meta description stay with Yoast's own ability (`yoast-seo/update-
 
 ## Changelog
 
+- **1.3.0:** find and replace across Elementor (classic, containers, Atomic), theme-builder templates and posts, with phone-number mode; list Elementor forms and change where they send (business email auto-detected, submitter thank-you never changed).
 - **1.2.4:** cache purge now requires Editor or higher; uninstall keeps the activity log unless BCM_AGENCY_DELETE_LOG_ON_UNINSTALL is set.
 - **1.2.3:** bcm/get-site-identity reports the installed BCM Agency Tools version, for checking rollouts.
 - **1.2.2:** clearer next-step message after adding a tracking code (service-specific check; purge only mentioned when the code isn't live yet).
