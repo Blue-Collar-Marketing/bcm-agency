@@ -4,7 +4,8 @@
 #
 # 1. build:   checks versions, lints PHP, builds the zip and info.json (no secrets).
 # 2. publish: waits for a second person to approve in the "updates" environment,
-#             then copies the files to the public updates repo (GitHub Pages).
+#             then copies the files to the public updates repo (GitHub Pages)
+#             using a fine-grained token that can only write to that repo.
 #
 # Sites only see the new version once publish finishes. Rolling it out to sites
 # is a separate, deliberate step (Cloudways WP Manager, in waves).
@@ -42,7 +43,7 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     # Required reviewer is set on this environment in repo Settings → Environments.
-    # The deploy key below only exists inside this environment, so nothing can
+    # The token below only exists inside this environment, so nothing can
     # publish without that approval.
     environment: updates
     steps:
@@ -53,21 +54,17 @@ jobs:
 
       - name: Publish to the updates site
         env:
-          DEPLOY_KEY: ${{ secrets.UPDATES_DEPLOY_KEY }}
-          UPDATES_REPO: ${{ vars.UPDATES_REPO }}   # e.g. your-org/bcm-agency-updates
+          # Fine-grained token limited to the updates repo (Contents: read & write).
+          # Stored as an environment secret, so it only exists after approval.
+          UPDATES_TOKEN: ${{ secrets.UPDATES_TOKEN }}
+          UPDATES_REPO: ${{ vars.UPDATES_REPO }}   # e.g. Blue-Collar-Marketing/bcm-agency-updates
           VERSION: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          test -n "$DEPLOY_KEY"   || { echo "UPDATES_DEPLOY_KEY secret is missing in the 'updates' environment"; exit 1; }
-          test -n "$UPDATES_REPO" || { echo "UPDATES_REPO variable is missing"; exit 1; }
+          test -n "$UPDATES_TOKEN" || { echo "UPDATES_TOKEN secret is missing in the 'updates' environment (or has expired)"; exit 1; }
+          test -n "$UPDATES_REPO"  || { echo "UPDATES_REPO variable is missing"; exit 1; }
 
-          mkdir -p ~/.ssh
-          echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
-          export GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes"
-
-          git clone --depth 1 "git@github.com:${UPDATES_REPO}.git" site
+          git clone --depth 1 "https://x-access-token:${UPDATES_TOKEN}@github.com/${UPDATES_REPO}.git" site
           mkdir -p site/bcm-agency
           # Keep older zips (handy for rollback); replace info.json so sites see the new version.
           cp dist/bcm-agency/*.zip site/bcm-agency/
@@ -81,7 +78,3 @@ jobs:
           git push origin HEAD
 
           echo "Published ${VERSION}. Sites will see it within about 12 hours, or immediately with 'Check again' on Dashboard → Updates."
-
-      - name: Remove key
-        if: always()
-        run: rm -f ~/.ssh/deploy_key
