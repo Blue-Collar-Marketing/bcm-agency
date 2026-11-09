@@ -67,6 +67,7 @@ SEO title and meta description stay with Yoast's own ability (`yoast-seo/update-
 
 ## Changelog
 
+- **1.2.4:** cache purge now requires Editor or higher; uninstall keeps the activity log unless BCM_AGENCY_DELETE_LOG_ON_UNINSTALL is set.
 - **1.2.3:** bcm/get-site-identity reports the installed BCM Agency Tools version, for checking rollouts.
 - **1.2.2:** clearer next-step message after adding a tracking code (service-specific check; purge only mentioned when the code isn't live yet).
 - **1.2.1:** after adding a tracking code, clear page caches the way WPCode's own save does (plus Breeze/Varnish), and store the block in WPCode's slashed format. New `bcm/purge-page-cache`.
