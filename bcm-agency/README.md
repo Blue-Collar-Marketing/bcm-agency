@@ -1,4 +1,4 @@
-# BCM Agency Tools (v1.3.0)
+# BCM Agency Tools (v1.3.1)
 
 Narrow, logged abilities that let Blue Collar Marketing's Claude workflows handle blog posts, images and site identity on client WordPress sites. They appear in Claude automatically through the site's existing WordPress connector (WordPress 6.9+ Abilities API + MCP Adapter). Nothing changes on the Claude side.
 
@@ -24,6 +24,9 @@ Narrow, logged abilities that let Blue Collar Marketing's Claude workflows handl
 | `bcm/replace-text` | Replaces it in the posts the person approved (`post_ids` + `approved: true`). Visible text only; tel: links keep their format; revision per page; Elementor styles rebuilt; caches cleared. | edit_pages + edit_others_posts |
 | `bcm/list-forms` | Read-only. Every Elementor form (pages, popups, headers, footers) with Email / Email 2 recipients, each labelled "business" or "submitter" (thank-you). | edit_pages |
 | `bcm/update-form-email` | Changes To/CC/BCC of the action that notifies the business (auto-detected, Email or Email 2). The submitter thank-you is never changed. Needs `approved: true`. | edit_pages + edit_others_posts |
+| `bcm/find-images` | Read-only. Where an image is used (Image/Image Box widgets, backgrounds, galleries, Atomic images), by file name, attachment id, or every image on a page. | edit_pages |
+| `bcm/list-media` | Read-only. Recent Media Library images with ids, to pick the replacement. | upload_files |
+| `bcm/replace-image` | Swaps one placement to another Media Library image (id, url and alt together). Needs `approved: true`; revision for undo; old image never deleted. | edit_pages + edit_others_posts |
 | `bcm/get-activity-log` | Recent BCM actions on this site. | manage_options |
 
 SEO title and meta description stay with Yoast's own ability (`yoast-seo/update-post-seo-data`). Yoast's ability can't set the focus keyphrase, so `create-post` / `update-post` handle it.
@@ -71,6 +74,7 @@ SEO title and meta description stay with Yoast's own ability (`yoast-seo/update-
 
 ## Changelog
 
+- **1.3.1:** find and swap images in Elementor (classic, backgrounds, Atomic); list Media Library images; client-friendly plugin description.
 - **1.3.0:** find and replace across Elementor (classic, containers, Atomic), theme-builder templates and posts, with phone-number mode; list Elementor forms and change where they send (business email auto-detected, submitter thank-you never changed).
 - **1.2.4:** cache purge now requires Editor or higher; uninstall keeps the activity log unless BCM_AGENCY_DELETE_LOG_ON_UNINSTALL is set.
 - **1.2.3:** bcm/get-site-identity reports the installed BCM Agency Tools version, for checking rollouts.
