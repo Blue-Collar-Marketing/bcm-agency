@@ -8,6 +8,7 @@ function bcm_agency_get_site_identity() {
 		'site_icon'  => (int) get_option( 'site_icon' ),
 		'timezone'   => wp_timezone_string(),
 		'home_url'   => home_url(),
+		'bcm_agency_version' => BCM_AGENCY_VERSION,
 	);
 }
 

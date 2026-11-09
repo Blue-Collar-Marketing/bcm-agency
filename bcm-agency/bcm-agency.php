@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       BCM Agency Tools
  * Description:       Narrow, logged abilities that let Blue Collar Marketing's Claude workflows upload images, manage blog posts, categories and tags, add known tracking codes to WPCode's Header & Footer fields, and update site identity. No delete actions.
- * Version:           1.2.2
+ * Version:           1.2.3
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Author:            Blue Collar Marketing
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'BCM_AGENCY_VERSION', '1.2.2' );
+define( 'BCM_AGENCY_VERSION', '1.2.3' );
 define( 'BCM_AGENCY_FILE', __FILE__ );
 define( 'BCM_AGENCY_DIR', plugin_dir_path( __FILE__ ) );
 
