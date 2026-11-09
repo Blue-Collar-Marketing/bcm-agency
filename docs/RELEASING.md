@@ -46,18 +46,25 @@ Where `bluecollarmarketing.ca` DNS is managed, add:
 
 Then **verify the domain** in GitHub: Organization settings → Pages → Add a verified domain. This stops anyone else's GitHub Pages site from claiming `updates.bluecollarmarketing.ca`. Don't skip it.
 
-### 5. Publishing key (write access to the updates repo only)
-On your computer:
-```
-ssh-keygen -t ed25519 -C "bcm-release-bot" -f bcm_updates_deploy -N ""
-```
-- `bcm-agency-updates` → Settings → Deploy keys → Add → paste `bcm_updates_deploy.pub` → tick **Allow write access**.
+### 5. Publishing token (write access to the updates repo only)
+- Organization settings → Personal access tokens → Settings → allow **fine-grained personal access tokens** (approval can stay on; approve your own request in the Pending tab).
+- Your profile → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate new token:
+  - Name: `bcm-release-bot`
+  - Resource owner: **Blue-Collar-Marketing**
+  - Expiration: up to 1 year. **Put the expiry date in your calendar**: releases stop working when it lapses (the run fails with "UPDATES_TOKEN … missing or has expired").
+  - Repository access: **Only select repositories** → `bcm-agency-updates`
+  - Permissions → Repository → **Contents: Read and write** (Metadata: read is added automatically). Nothing else.
+  - Generate, then copy the token (it's shown once).
 - `bcm-agency` → Settings → Environments → New environment **`updates`**:
-  - Required reviewers: Chris and Sasha (or whoever approves releases). Tick **Prevent self-review**.
+  - Required reviewers: yourself. While only one person manages GitHub, leave **Prevent self-review** off; turn it on when a second person joins.
   - Deployment branches and tags: Selected → add tag rule `v*`.
-  - Environment secrets → `UPDATES_DEPLOY_KEY` → paste the contents of `bcm_updates_deploy` (the private key).
-- `bcm-agency` → Settings → Secrets and variables → Actions → Variables → `UPDATES_REPO` = `<your-org>/bcm-agency-updates`.
-- Delete both key files from your computer.
+  - Environment secrets → `UPDATES_TOKEN` → paste the token.
+- `bcm-agency` → Settings → Secrets and variables → Actions → Variables → `UPDATES_REPO` = `Blue-Collar-Marketing/bcm-agency-updates`.
+
+**Renewing the token:** generate a new one with the same settings, replace the `UPDATES_TOKEN` environment secret, delete the old token.
+
+### One-person setup
+While Chris is the only person managing GitHub: the `main` ruleset requires a pull request with **0** approvals (no "most recent push" approval), and the `updates` environment has Chris as reviewer without "Prevent self-review". Every release still pauses for a deliberate Approve. When a developer joins, set required approvals to 1, re-tick both review settings, and add them as a reviewer.
 
 ---
 
@@ -68,7 +75,7 @@ ssh-keygen -t ed25519 -C "bcm-release-bot" -f bcm_updates_deploy -N ""
    - Add a changelog line at the top of the `## Changelog` list in `bcm-agency/README.md`: `- **1.3.0:** what changed.`
 2. Tag it: `git tag v1.3.0 && git push origin v1.3.0`
 3. The **Release** action runs. The build job checks the versions match, checks every PHP file, and builds the zip and `info.json`. Any problem stops it here.
-4. The publish job waits. A second person opens the run in the Actions tab → **Review deployments** → Approve.
+4. The publish job waits. The reviewer (a second person, once there is one) opens the run in the Actions tab → **Review deployments** → Approve.
 5. Within a minute or two, `https://updates.bluecollarmarketing.ca/bcm-agency/info.json` shows the new version.
 6. Sites notice within about 12 hours (or immediately via Dashboard → Updates → Check again).
 
