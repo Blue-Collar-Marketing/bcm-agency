@@ -1,4 +1,4 @@
-# BCM Agency Tools (v1.3.2)
+# BCM Agency Tools (v1.3.3)
 
 Narrow, logged abilities that let Blue Collar Marketing's Claude workflows handle blog posts, images and site identity on client WordPress sites. They appear in Claude automatically through the site's existing WordPress connector (WordPress 6.9+ Abilities API + MCP Adapter). Nothing changes on the Claude side.
 
@@ -35,6 +35,10 @@ Narrow, logged abilities that let Blue Collar Marketing's Claude workflows handl
 | `bcm/update-menu-item` | Renames, re-links (custom links), re-parents or moves a menu item. Needs `approved: true`. | edit_theme_options |
 | `bcm/remove-menu-item` | Removes a menu link (never the page); children move up a level. Needs `approved: true`. | edit_theme_options |
 | `bcm/check-for-updates` | Checks the BCM update feed now and reports installed vs latest version. | update_plugins |
+| `bcm/add-gallery-image` | Adds a Media Library image to a gallery/carousel (Basic Gallery, Pro Gallery incl. tabbed, Image Carousel, Media Carousel), classic included, at any position. Needs `approved: true`. | edit_pages + edit_others_posts |
+| `bcm/remove-gallery-image` | Removes one image from a gallery/carousel (never the last; never from the Media Library). Needs `approved: true`. | edit_pages + edit_others_posts |
+| `bcm/add-gallery-tab` | Adds a tab (title + images) to a Pro Gallery in tabbed "multiple galleries" mode. Needs `approved: true`. | edit_pages + edit_others_posts |
+| `bcm/remove-tracking-code` | Removes a BCM-added code block from WPCode Header & Footer (never hand-added code). Needs `approved: true`. | manage_options |
 | `bcm/get-activity-log` | Recent BCM actions on this site. | manage_options |
 
 SEO title and meta description stay with Yoast's own ability (`yoast-seo/update-post-seo-data`). Yoast's ability can't set the focus keyphrase, so `create-post` / `update-post` handle it.
@@ -82,6 +86,7 @@ SEO title and meta description stay with Yoast's own ability (`yoast-seo/update-
 
 ## Changelog
 
+- **1.3.3:** Marker.io feedback widget as a known tracking service; `bcm/remove-tracking-code`; Marker.io comment attachments allowed as an image source (Marker.io's attachment storage only); add/remove images in galleries and carousels, including inside tabs of tabbed galleries; add gallery tabs.
 - **1.3.2:** element-only find/replace (`element_ids`); add/remove items in widget lists (icon lists, FAQs, price lists) including classic widgets; WordPress menu editing; image swaps carry over alt text; update checks every 2 hours plus `bcm/check-for-updates`.
 - **1.3.1:** find and swap images in Elementor (classic, backgrounds, Atomic); list Media Library images; client-friendly plugin description.
 - **1.3.0:** find and replace across Elementor (classic, containers, Atomic), theme-builder templates and posts, with phone-number mode; list Elementor forms and change where they send (business email auto-detected, submitter thank-you never changed).
