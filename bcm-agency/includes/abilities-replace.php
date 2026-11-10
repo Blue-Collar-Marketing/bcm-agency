@@ -97,7 +97,7 @@ function bcm_agency_format_replacement( $matched, $replace, $matcher ) {
  * Walks an Elementor element tree. Collects matches, and if $replace is not null,
  * replaces them in place. Returns number of matches.
  */
-function bcm_agency_walk_elements( array &$elements, $matcher, $replace, array &$found, $path = '' ) {
+function bcm_agency_walk_elements( array &$elements, $matcher, $replace, array &$found, $path = '', $only = null, $inside = false ) {
 	$count = 0;
 	foreach ( $elements as $i => &$el ) {
 		if ( ! is_array( $el ) ) {
@@ -105,15 +105,26 @@ function bcm_agency_walk_elements( array &$elements, $matcher, $replace, array &
 		}
 		$label = isset( $el['widgetType'] ) ? $el['widgetType'] : ( isset( $el['elType'] ) ? $el['elType'] : 'element' );
 		$el_id = isset( $el['id'] ) ? (string) $el['id'] : '';
-		if ( isset( $el['settings'] ) && is_array( $el['settings'] ) ) {
+		// With element_ids, only the listed elements (and everything inside them) are searched or changed.
+		$in_scope = $inside || null === $only || in_array( $el_id, $only, true );
+		if ( $in_scope && isset( $el['settings'] ) && is_array( $el['settings'] ) ) {
 			$count += bcm_agency_walk_values( $el['settings'], $matcher, $replace, $found, $el_id, $label, 'settings' );
 		}
 		if ( isset( $el['elements'] ) && is_array( $el['elements'] ) ) {
-			$count += bcm_agency_walk_elements( $el['elements'], $matcher, $replace, $found, $path . '/' . $el_id );
+			$count += bcm_agency_walk_elements( $el['elements'], $matcher, $replace, $found, $path . '/' . $el_id, $only, $in_scope );
 		}
 	}
 	unset( $el );
 	return $count;
+}
+
+/** Normalised element_ids input, or null for "whole page". */
+function bcm_agency_only_ids( array $input ) {
+	if ( empty( $input['element_ids'] ) ) {
+		return null;
+	}
+	$ids = array_values( array_filter( array_map( 'strval', (array) $input['element_ids'] ) ) );
+	return $ids ? $ids : null;
 }
 
 function bcm_agency_walk_values( array &$node, $matcher, $replace, array &$found, $el_id, $widget, $keypath ) {
@@ -221,7 +232,11 @@ function bcm_agency_find_text( array $input ) {
 	if ( is_wp_error( $matcher ) ) {
 		return $matcher;
 	}
+	$only    = bcm_agency_only_ids( $input );
 	$cands   = bcm_agency_replace_candidates( $matcher );
+	if ( null !== $only ) {
+		$cands['classic'] = array(); // element_ids only apply to Elementor content.
+	}
 	$results = array();
 	$total   = 0;
 
@@ -235,7 +250,7 @@ function bcm_agency_find_text( array $input ) {
 			continue;
 		}
 		$found = array();
-		$n     = bcm_agency_walk_elements( $data, $matcher, null, $found );
+		$n     = bcm_agency_walk_elements( $data, $matcher, null, $found, '', $only );
 		if ( $n ) {
 			$results[] = bcm_agency_result_row( $post, 'elementor', $n, $found );
 			$total    += $n;
@@ -335,7 +350,11 @@ function bcm_agency_replace_text( array $input ) {
 		return $matcher;
 	}
 
+	$only    = bcm_agency_only_ids( $input );
 	$cands   = bcm_agency_replace_candidates( $matcher, $ids );
+	if ( null !== $only ) {
+		$cands['classic'] = array();
+	}
 	$changed = array();
 	$total   = 0;
 
@@ -348,7 +367,7 @@ function bcm_agency_replace_text( array $input ) {
 			continue;
 		}
 		$found = array();
-		$n     = bcm_agency_walk_elements( $data, $matcher, $replace, $found );
+		$n     = bcm_agency_walk_elements( $data, $matcher, $replace, $found, '', $only );
 		if ( $n ) {
 			$how       = bcm_agency_save_elementor_data( $id, $data );
 			$changed[] = array(
@@ -417,13 +436,18 @@ function bcm_agency_register_replace_abilities() {
 			'default'     => false,
 			'description' => 'Match the same phone number in any format: 613-299-2053, (613) 299-2053, 613.299.2053, +1 613 299 2053, tel:6132992053.',
 		),
+		'element_ids' => array(
+			'type'        => 'array',
+			'items'       => array( 'type' => 'string' ),
+			'description' => 'Optional. Limit to these Elementor element ids (and anything inside them), e.g. the one widget a feedback pin points at. Without it, every match on the page is included.',
+		),
 	);
 
 	bcm_agency_register(
 		'bcm/find-text',
 		array(
 			'label'               => 'Find text across the site',
-			'description'         => 'Read-only. Finds text (or a phone number in any format) in Elementor content of every version (classic sections, containers and Atomic), Elementor headers, footers, popups and global widgets, and non-Elementor posts and pages. Returns each match with the page, the widget, the field and surrounding text. Site-wide templates are listed first. Use before bcm/replace-text.',
+			'description'         => 'Read-only. Finds text (or a phone number in any format) in Elementor content of every version (classic sections, containers and Atomic), Elementor headers, footers, popups and global widgets, and non-Elementor posts and pages. Returns each match with the page, the element id, the widget, the field and surrounding text. Optional element_ids limits the search to specific elements. Site-wide templates are listed first. Use before bcm/replace-text.',
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => $common,
@@ -442,7 +466,7 @@ function bcm_agency_register_replace_abilities() {
 		'bcm/replace-text',
 		array(
 			'label'               => 'Replace text across selected pages',
-			'description'         => 'Replaces text found by bcm/find-text in the posts the person approved. Changes live content, so it requires post_ids and approved: true. Only visible text values are changed (never element ids, widget types or styling). Phone mode writes the new number in the format each spot used (tel: links get digits only). Each changed page gets a revision for undo, Elementor styles are rebuilt and page caches are cleared.',
+			'description'         => 'Replaces text found by bcm/find-text in the posts the person approved, optionally only inside specific element_ids (use this when the same text appears more than once on a page and only one spot should change). Changes live content, so it requires post_ids and approved: true. Only visible text values are changed (never element ids, widget types or styling). Phone mode writes the new number in the format each spot used (tel: links get digits only). Each changed page gets a revision for undo, Elementor styles are rebuilt and page caches are cleared.',
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array_merge(
