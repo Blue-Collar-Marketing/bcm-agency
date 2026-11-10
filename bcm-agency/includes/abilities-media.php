@@ -15,6 +15,9 @@ function bcm_agency_media_hosts() {
 		'drive.usercontent.google.com',
 		'docs.google.com',
 		'.googleusercontent.com',
+		// Marker.io comment attachments: only Marker.io's own attachment storage, never all of S3.
+		's3.eu-west-1.amazonaws.com/marker.attachments.prod/',
+		'marker.attachments.prod.s3.eu-west-1.amazonaws.com',
 	);
 	return array_values( array_filter( (array) apply_filters( 'bcm_agency_media_hosts', $hosts ) ) );
 }
@@ -25,8 +28,17 @@ function bcm_agency_host_allowed( $url ) {
 		return false;
 	}
 	$host = strtolower( $parts['host'] );
+	$path = isset( $parts['path'] ) ? $parts['path'] : '/';
 	foreach ( bcm_agency_media_hosts() as $allowed ) {
 		$allowed = strtolower( $allowed );
+		// "host/path/prefix/" entries allow only URLs under that path on that host.
+		if ( false !== strpos( $allowed, '/' ) ) {
+			list( $a_host, $a_path ) = explode( '/', $allowed, 2 );
+			if ( $host === $a_host && 0 === strpos( $path, '/' . $a_path ) && false === strpos( $path, '..' ) ) {
+				return true;
+			}
+			continue;
+		}
 		if ( '.' === $allowed[0] ? ( substr( $host, -strlen( $allowed ) ) === $allowed ) : ( $host === $allowed ) ) {
 			return true;
 		}
@@ -184,7 +196,7 @@ function bcm_agency_register_media_abilities() {
 		'bcm/upload-media',
 		array(
 			'label'               => 'Upload image to Media Library',
-			'description'         => 'Adds one image (JPEG, PNG, WebP or GIF, max 10 MB) to the Media Library from an approved HTTPS source (this site, Google Drive) or from inline base64 (max 5 MB), with alt text. Returns the attachment ID to use as a featured image. Google Drive files must be shared as "anyone with the link"; use the direct download form https://drive.google.com/uc?export=download&id=FILE_ID.',
+			'description'         => 'Adds one image (JPEG, PNG, WebP or GIF, max 10 MB) to the Media Library from an approved HTTPS source (this site, Google Drive, Marker.io comment attachments via issue_get_attachments) or from inline base64 (max 5 MB), with alt text. Returns the attachment ID to use as a featured image. Google Drive files must be shared as "anyone with the link"; use the direct download form https://drive.google.com/uc?export=download&id=FILE_ID.',
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array(
