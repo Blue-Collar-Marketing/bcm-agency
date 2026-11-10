@@ -243,6 +243,26 @@ function bcm_agency_replace_image( array $input ) {
 	$new_url = (string) wp_get_attachment_url( $new_id );
 	$new_alt = (string) get_post_meta( $new_id, '_wp_attachment_image_alt', true );
 
+	// Alt text: an explicit alt_text wins; otherwise, if the new image has none in the
+	// Media Library, carry over the old image's alt so the page doesn't lose it.
+	$alt_note = '';
+	if ( ! isset( $input['alt_text'] ) && '' === trim( $new_alt ) ) {
+		$old_alt = '';
+		if ( $before['id'] ) {
+			$old_alt = (string) get_post_meta( $before['id'], '_wp_attachment_image_alt', true );
+		}
+		if ( '' === trim( $old_alt ) && isset( $node['alt'] ) && is_string( $node['alt'] ) ) {
+			$old_alt = $node['alt'];
+		}
+		if ( '' !== trim( $old_alt ) ) {
+			update_post_meta( $new_id, '_wp_attachment_image_alt', sanitize_text_field( $old_alt ) );
+			$new_alt  = sanitize_text_field( $old_alt );
+			$alt_note = 'The new image had no alt text, so the previous image\'s alt text was copied to it.';
+		} else {
+			$alt_note = 'Neither image has alt text. Ask the person for a short description and set it with alt_text (good for SEO and accessibility).';
+		}
+	}
+
 	bcm_agency_set_typed( $node['id'], $new_id );
 	// Atomic library images often store url as null; keep that shape.
 	if ( null !== bcm_agency_typed_value( $node['url'] ) ) {
@@ -274,6 +294,7 @@ function bcm_agency_replace_image( array $input ) {
 			'url' => $new_url,
 			'alt' => (string) get_post_meta( $new_id, '_wp_attachment_image_alt', true ),
 		),
+		'alt_text_note'  => $alt_note,
 		'saved_by'       => $how,
 		'caches_cleared' => $purged,
 		'note'           => 'The old image stays in the Media Library (nothing is deleted). Undo: the page\'s Revisions (Elementor: History → Revisions).',
