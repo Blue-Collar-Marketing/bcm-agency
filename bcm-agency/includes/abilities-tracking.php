@@ -33,6 +33,11 @@ function bcm_agency_tracking_services() {
 			'scan'    => '/\b(AW-\d{6,12})\b/',
 			'pattern' => '/\b(AW-\d{6,12})\b/',
 		),
+		'marker_io'             => array(
+			'label'   => 'Marker.io feedback widget',
+			'pattern' => '/project\s*:\s*["\']([a-f0-9]{20,32})["\']|^([a-f0-9]{20,32})$/',
+			'scan'    => '/markerConfig\s*=\s*\{[^}]*?project\s*:\s*["\']([a-f0-9]{20,32})["\']/s',
+		),
 		'meta_pixel'            => array(
 			'label'   => 'Meta (Facebook) Pixel',
 			'scan'    => '/fbq\(\s*[\'"]init[\'"]\s*,\s*[\'"](\d{10,20})[\'"]/',
@@ -88,6 +93,13 @@ function bcm_agency_tracking_code( $service, $id ) {
 				array(
 					'site_wide_body',
 					"<!-- Google Tag Manager (noscript) -->\n<noscript><iframe src=\"https://www.googletagmanager.com/ns.html?id={$e}\" height=\"0\" width=\"0\" style=\"display:none;visibility:hidden\"></iframe></noscript>\n<!-- End Google Tag Manager (noscript) -->",
+				),
+			);
+		case 'marker_io':
+			return array(
+				array(
+					'site_wide_header',
+					"<!-- Marker.io feedback widget -->\n<script>\n  window.markerConfig = {\n    project: '{$j}',\n    source: 'snippet'\n  };\n  !(function (e, r, t) {\n    if (e.__Marker) return;\n    e.__Marker = {};\n    var n = r.createElement('script');\n    n.async = 1;\n    n.src = 'https://edge.marker.io/latest/shim.js';\n    var s = r.getElementsByTagName('script')[0];\n    s.parentNode.insertBefore(n, s);\n  })(window, document);\n</script>",
 				),
 			);
 		case 'meta_pixel':
@@ -296,6 +308,7 @@ function bcm_agency_tracking_next_step( $service, $live ) {
 		'google_analytics_4'    => 'Confirm data is arriving in GA4 (Reports → Realtime) or with Google Tag Assistant.',
 		'google_tag_manager'    => 'Confirm the container loads with Google Tag Assistant (Preview mode in GTM).',
 		'google_ads'            => 'Confirm the tag with Google Tag Assistant; the Ads tag status can take a few hours to update.',
+		'marker_io'             => 'Open the site and check the Marker.io feedback button appears (who sees it is set in the Marker.io project\'s widget settings). Remove it at sign-off with bcm/remove-tracking-code.',
 		'meta_pixel'            => 'Confirm the PageView fires with the Meta Pixel Helper browser extension or Events Manager → Test Events.',
 	);
 	$step = isset( $check[ $service ] ) ? $check[ $service ] : 'Confirm the code is working with the service.';
@@ -303,6 +316,66 @@ function bcm_agency_tracking_next_step( $service, $live ) {
 		return 'Once a Cloudways (Varnish) or CDN purge makes it appear on the homepage: ' . $step;
 	}
 	return $step;
+}
+
+/**
+ * Removes a BCM-added code block (and only BCM-marked blocks) from WPCode's
+ * Header & Footer fields. Code added by hand or by other tools is never touched.
+ */
+function bcm_agency_remove_tracking_code( array $input ) {
+	if ( empty( $input['approved'] ) ) {
+		return new WP_Error( 'bcm_needs_approval', 'Removing a tracking code takes it off every page immediately. Confirm the service and ID with the person, then call again with approved: true.' );
+	}
+	$service = isset( $input['service'] ) ? (string) $input['service'] : '';
+	$id      = bcm_agency_extract_tracking_id( $service, isset( $input['value'] ) ? $input['value'] : '' );
+	if ( is_wp_error( $id ) ) {
+		return $id;
+	}
+	$pattern = '/\n*<!-- BCM:start ' . preg_quote( $service, '/' ) . ' ' . preg_quote( $id, '/' ) . '\b[^>]*-->.*?<!-- BCM:end ' . preg_quote( $service, '/' ) . ' ' . preg_quote( $id, '/' ) . ' -->\n*/s';
+	$removed = array();
+	foreach ( array( 'ihaf_insert_header' => 'Header', 'ihaf_insert_body' => 'Body', 'ihaf_insert_footer' => 'Footer' ) as $opt => $label ) {
+		$current = (string) get_option( $opt, '' );
+		if ( '' === $current || ! preg_match( $pattern, $current ) ) {
+			continue;
+		}
+		$new = trim( preg_replace( $pattern, "\n\n", $current ) );
+		update_option( $opt, $new );
+		$removed[] = $label;
+	}
+	if ( ! $removed ) {
+		$elsewhere = array();
+		foreach ( bcm_agency_tracking_sources() as $src ) {
+			if ( false !== strpos( $src['text'], $id ) ) {
+				$elsewhere[] = $src['where'];
+			}
+		}
+		return new WP_Error(
+			'bcm_not_found',
+			$elsewhere
+				? $id . ' was not added by BCM, so it is not removed automatically. It is in: ' . implode( '; ', $elsewhere ) . '. Remove it by hand in WPCode.'
+				: 'No BCM block for ' . $id . ' was found. Nothing was removed.'
+		);
+	}
+	$purged = bcm_agency_purge_page_cache();
+	$live   = null;
+	$html   = bcm_agency_homepage_html();
+	if ( null !== $html ) {
+		$live = false !== strpos( $html, $id );
+	}
+	$services = bcm_agency_tracking_services();
+	return array(
+		'service'            => $services[ $service ]['label'],
+		'tracking_id'        => $id,
+		'removed_from'       => 'WPCode → Header & Footer: ' . implode( ' + ', $removed ),
+		'still_on_homepage'  => $live,
+		'status'             => true === $live ? 'Removed from WPCode, but the ID still appears on the homepage: from another source or a cache that has not cleared yet.' : 'Removed and no longer on the homepage.',
+		'caches_cleared'     => $purged,
+		'_log'               => array(
+			'service'     => $service,
+			'tracking_id' => $id,
+			'fields'      => $removed,
+		),
+	);
 }
 
 function bcm_agency_register_tracking_abilities() {
@@ -328,7 +401,7 @@ function bcm_agency_register_tracking_abilities() {
 		'bcm/add-tracking-code',
 		array(
 			'label'               => 'Add tracking or verification code (WPCode Header & Footer)',
-			'description'         => 'Adds a known service to the whole site through WPCode\'s global Header & Footer fields, as a clearly marked BCM block appended after existing content (existing code is never changed): Google Search Console or Bing verification, Google Analytics 4, Google Tag Manager (header + body), Google Ads, or Meta Pixel. Pass the ID or paste what the service provided as value; the plugin extracts the ID and writes the official code itself (pasted markup is never used). Refuses if the ID is already on the site. Requires approved: true after the person confirms. Reports whether the code is live on the homepage. Other scripts are added by a developer in WPCode; removal is done by deleting the marked block in Header & Footer.',
+			'description'         => 'Adds a known service to the whole site through WPCode\'s global Header & Footer fields, as a clearly marked BCM block appended after existing content (existing code is never changed): Google Search Console or Bing verification, Google Analytics 4, Google Tag Manager (header + body), Google Ads, Meta Pixel, or the Marker.io feedback widget (project id from the Marker.io connector). Pass the ID or paste what the service provided as value; the plugin extracts the ID and writes the official code itself (pasted markup is never used). Refuses if the ID is already on the site. Requires approved: true after the person confirms. Reports whether the code is live on the homepage. Other scripts are added by a developer in WPCode; remove with bcm/remove-tracking-code.',
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array(
@@ -349,6 +422,34 @@ function bcm_agency_register_tracking_abilities() {
 				'additionalProperties' => false,
 			),
 			'execute_callback'    => 'bcm_agency_add_tracking_code',
+			'permission_callback' => function () {
+				return current_user_can( 'manage_options' );
+			},
+		)
+	);
+
+	bcm_agency_register(
+		'bcm/remove-tracking-code',
+		array(
+			'label'               => 'Remove a tracking or verification code (BCM blocks only)',
+			'description'         => 'Removes a code that BCM added (a marked BCM block in WPCode Header & Footer), e.g. turning the Marker.io feedback widget off at sign-off or retiring an old Analytics ID. Never removes code added by hand or by other tools; it reports where that code lives instead. Requires approved: true; clears caches and checks the homepage.',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'service'  => array(
+						'type' => 'string',
+						'enum' => array_keys( bcm_agency_tracking_services() ),
+					),
+					'value'    => array(
+						'type'        => 'string',
+						'description' => 'The ID to remove (e.g. G-ABC123, the Marker.io project id).',
+					),
+					'approved' => array( 'type' => 'boolean' ),
+				),
+				'required'             => array( 'service', 'value' ),
+				'additionalProperties' => false,
+			),
+			'execute_callback'    => 'bcm_agency_remove_tracking_code',
 			'permission_callback' => function () {
 				return current_user_can( 'manage_options' );
 			},
