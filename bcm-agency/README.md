@@ -1,4 +1,4 @@
-# BCM Agency Tools (v1.3.1)
+# BCM Agency Tools (v1.3.2)
 
 Narrow, logged abilities that let Blue Collar Marketing's Claude workflows handle blog posts, images and site identity on client WordPress sites. They appear in Claude automatically through the site's existing WordPress connector (WordPress 6.9+ Abilities API + MCP Adapter). Nothing changes on the Claude side.
 
@@ -27,6 +27,14 @@ Narrow, logged abilities that let Blue Collar Marketing's Claude workflows handl
 | `bcm/find-images` | Read-only. Where an image is used (Image/Image Box widgets, backgrounds, galleries, Atomic images), by file name, attachment id, or every image on a page. | edit_pages |
 | `bcm/list-media` | Read-only. Recent Media Library images with ids, to pick the replacement. | upload_files |
 | `bcm/replace-image` | Swaps one placement to another Media Library image (id, url and alt together). Needs `approved: true`; revision for undo; old image never deleted. | edit_pages + edit_others_posts |
+| `bcm/list-items` | Read-only. A widget's repeating lists (Icon List bullets, Toggle/Accordion/FAQ items, Price List rows, tabs, slides) with each item's _id and text. | edit_pages |
+| `bcm/add-list-item` | Adds an item by copying an existing one (same icon and styling), sets its text/link, inserts at any position. Classic widgets included. Needs `approved: true`. | edit_pages + edit_others_posts |
+| `bcm/remove-list-item` | Removes one item by _id (never the last). Needs `approved: true`. | edit_pages + edit_others_posts |
+| `bcm/list-menus` | Read-only. WordPress menus, where they display, and every item. | edit_theme_options |
+| `bcm/add-menu-item` | Adds a page or custom link to a menu, optionally as a dropdown child and at a set position. Needs `approved: true`. | edit_theme_options |
+| `bcm/update-menu-item` | Renames, re-links (custom links), re-parents or moves a menu item. Needs `approved: true`. | edit_theme_options |
+| `bcm/remove-menu-item` | Removes a menu link (never the page); children move up a level. Needs `approved: true`. | edit_theme_options |
+| `bcm/check-for-updates` | Checks the BCM update feed now and reports installed vs latest version. | update_plugins |
 | `bcm/get-activity-log` | Recent BCM actions on this site. | manage_options |
 
 SEO title and meta description stay with Yoast's own ability (`yoast-seo/update-post-seo-data`). Yoast's ability can't set the focus keyphrase, so `create-post` / `update-post` handle it.
@@ -74,6 +82,7 @@ SEO title and meta description stay with Yoast's own ability (`yoast-seo/update-
 
 ## Changelog
 
+- **1.3.2:** element-only find/replace (`element_ids`); add/remove items in widget lists (icon lists, FAQs, price lists) including classic widgets; WordPress menu editing; image swaps carry over alt text; update checks every 2 hours plus `bcm/check-for-updates`.
 - **1.3.1:** find and swap images in Elementor (classic, backgrounds, Atomic); list Media Library images; client-friendly plugin description.
 - **1.3.0:** find and replace across Elementor (classic, containers, Atomic), theme-builder templates and posts, with phone-number mode; list Elementor forms and change where they send (business email auto-detected, submitter thank-you never changed).
 - **1.2.4:** cache purge now requires Editor or higher; uninstall keeps the activity log unless BCM_AGENCY_DELETE_LOG_ON_UNINSTALL is set.
