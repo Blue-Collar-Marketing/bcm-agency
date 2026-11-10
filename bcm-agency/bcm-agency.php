@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       BCM Agency Tools
  * Description:       Blue Collar Marketing's site toolkit. Powers faster, safer updates across our managed websites: content and image changes, blog publishing, contact form settings and tracking codes, with every change approved and logged.
- * Version:           1.3.2
+ * Version:           1.3.3
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Author:            Blue Collar Marketing
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'BCM_AGENCY_VERSION', '1.3.2' );
+define( 'BCM_AGENCY_VERSION', '1.3.3' );
 define( 'BCM_AGENCY_FILE', __FILE__ );
 define( 'BCM_AGENCY_DIR', plugin_dir_path( __FILE__ ) );
 
@@ -68,6 +68,7 @@ add_action(
 		add_action( 'wp_abilities_api_init', 'bcm_agency_register_replace_abilities' );
 		add_action( 'wp_abilities_api_init', 'bcm_agency_register_form_abilities' );
 		add_action( 'wp_abilities_api_init', 'bcm_agency_register_image_abilities' );
+		add_action( 'wp_abilities_api_init', 'bcm_agency_register_gallery_abilities' );
 		add_action( 'wp_abilities_api_init', 'bcm_agency_register_list_abilities' );
 		add_action( 'wp_abilities_api_init', 'bcm_agency_register_menu_abilities' );
 		add_action( 'wp_abilities_api_init', 'bcm_agency_register_update_abilities' );
