@@ -278,6 +278,45 @@ function bcm_agency_publish_post( array $input ) {
 	return $out;
 }
 
+function bcm_agency_unpublish_post( array $input ) {
+	if ( empty( $input['approved'] ) ) {
+		return new WP_Error( 'bcm_needs_approval', 'Unpublishing takes the post off the site right away (its URL stops working). Confirm with the person, then call again with approved: true.' );
+	}
+	$post = bcm_agency_get_editable_post( isset( $input['post_id'] ) ? $input['post_id'] : 0 );
+	if ( is_wp_error( $post ) ) {
+		return $post;
+	}
+	if ( ! in_array( $post->post_status, array( 'publish', 'future', 'private' ), true ) ) {
+		return new WP_Error( 'bcm_not_live', 'This post is already a draft (status: ' . $post->post_status . ').' );
+	}
+	$was = $post->post_status;
+	$url = get_permalink( $post );
+	$r   = wp_update_post(
+		array(
+			'ID'          => $post->ID,
+			'post_status' => 'draft',
+		),
+		true
+	);
+	if ( is_wp_error( $r ) ) {
+		return $r;
+	}
+	$cleared = bcm_agency_purge_page_cache();
+	$post    = get_post( $post->ID );
+	$out     = bcm_agency_format_post( $post );
+	$out['was']        = $was;
+	$out['former_url'] = $url;
+	$out['cleared']    = $cleared;
+	$out['note']       = 'The post is a draft again and nothing was deleted. Publish or schedule it again any time. If it was live long enough for Google to see it, its old URL will show as "not found" until it is republished.';
+	$out['_log']       = array(
+		'action' => 'unpublished to draft',
+		'was'    => $was,
+		'title'  => $out['title'],
+		'url'    => $url,
+	);
+	return $out;
+}
+
 function bcm_agency_get_post( array $input ) {
 	$post = bcm_agency_get_editable_post( isset( $input['post_id'] ) ? $input['post_id'] : 0 );
 	if ( is_wp_error( $post ) ) {
@@ -428,7 +467,7 @@ function bcm_agency_register_post_abilities() {
 		'bcm/schedule-post',
 		array(
 			'label'               => 'Schedule blog post',
-			'description'         => 'Schedules a draft blog post to publish at a future time (at least 5 minutes ahead), or moves a scheduled post back to draft with unschedule: true. Only call after a person has approved the post. Cannot publish immediately or unpublish a live post.',
+			'description'         => 'Schedules a draft blog post to publish at a future time (at least 5 minutes ahead), or moves a scheduled post back to draft with unschedule: true. Only call after a person has approved the post. Cannot publish immediately; to take a live post off the site use bcm/unpublish-post.',
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array(
@@ -456,7 +495,7 @@ function bcm_agency_register_post_abilities() {
 		'bcm/publish-post',
 		array(
 			'label'               => 'Publish blog post now',
-			'description'         => 'Publishes a draft or scheduled blog post immediately (for quick posts a PM asks for). Requires approved: true after the person confirms. Cannot unpublish.',
+			'description'         => 'Publishes a draft or scheduled blog post immediately (for quick posts a PM asks for). Requires approved: true after the person confirms. To take a post back off the site, use bcm/unpublish-post.',
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array(
@@ -470,6 +509,30 @@ function bcm_agency_register_post_abilities() {
 				'additionalProperties' => false,
 			),
 			'execute_callback'    => 'bcm_agency_publish_post',
+			'permission_callback' => function () {
+				return current_user_can( 'publish_posts' );
+			},
+		)
+	);
+
+	bcm_agency_register(
+		'bcm/unpublish-post',
+		array(
+			'label'               => 'Unpublish blog post (back to draft)',
+			'description'         => 'Moves a published or scheduled blog post back to draft, e.g. after a test post has been checked in the live template. Nothing is deleted; it can be published again. Requires approved: true after the person confirms. Clears page caches.',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'post_id'  => array( 'type' => 'integer' ),
+					'approved' => array(
+						'type'        => 'boolean',
+						'description' => 'Set true only after the person has approved taking this post off the site.',
+					),
+				),
+				'required'             => array( 'post_id' ),
+				'additionalProperties' => false,
+			),
+			'execute_callback'    => 'bcm_agency_unpublish_post',
 			'permission_callback' => function () {
 				return current_user_can( 'publish_posts' );
 			},
