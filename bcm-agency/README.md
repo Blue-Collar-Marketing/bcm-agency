@@ -1,4 +1,4 @@
-# BCM Agency Tools (v1.3.3)
+# BCM Agency Tools (v1.3.4)
 
 Narrow, logged abilities that let Blue Collar Marketing's Claude workflows handle blog posts, images and site identity on client WordPress sites. They appear in Claude automatically through the site's existing WordPress connector (WordPress 6.9+ Abilities API + MCP Adapter). Nothing changes on the Claude side.
 
@@ -11,14 +11,18 @@ Narrow, logged abilities that let Blue Collar Marketing's Claude workflows handl
 | `bcm/update-post` | Edits a post. Live or scheduled posts need `live_edit_approved: true`. | edit_posts + edit_post |
 | `bcm/schedule-post` | Schedules a draft for a future time, or moves it back to draft. | publish_posts |
 | `bcm/publish-post` | Publishes a draft or scheduled post now. Needs `approved: true`. | publish_posts |
+| `bcm/unpublish-post` | Moves a published or scheduled post back to draft (nothing deleted), e.g. after checking a test post in the live template. Needs `approved: true`; clears caches. | publish_posts |
 | `bcm/get-post` | Reads one post, with readiness warnings. | edit_posts |
 | `bcm/list-posts` | Lists posts by status (draft, scheduled, published). | edit_posts |
 | `bcm/list-categories` | Lists existing categories. | edit_posts |
 | `bcm/create-term` | Creates a category (optionally nested) or tag; returns the existing one if the name is taken. | manage_categories |
 | `bcm/list-tracking-codes` | Finds Search Console, Bing, GA4, GTM, Google Ads and Meta Pixel IDs in WPCode and on the live homepage. | manage_options |
 | `bcm/add-tracking-code` | Adds one of those services to WPCode's Header & Footer fields as a marked `<!-- BCM:start … -->` block, appended after existing code. Needs `approved: true`; refuses duplicates; reports whether it's live. | manage_options |
-| `bcm/get-site-identity` | Reads site title, tagline, timezone. | edit_posts |
-| `bcm/update-site-identity` | Sets site title and/or tagline. | manage_options |
+| `bcm/get-site-identity` | Reads site title, tagline, site icon, timezone. | edit_posts |
+| `bcm/update-site-identity` | Sets site title, tagline and/or site icon (favicon) from a Media Library image; warns if the icon isn't square or is under 512px. | manage_options |
+| `bcm/set-homepage` | Makes a published page the static homepage (Settings → Reading), optionally setting the posts page. Needs `approved: true`; returns before/after for undo. | manage_options |
+| `bcm/get-atomic-image-fit` / `bcm/set-atomic-image-fit` | Opt-in, **off by default**. When turned on (`approved: true`), Elementor Atomic images fill the box set on their image element. Classic Elementor images are never affected; fully reversible. | edit_posts / manage_options |
+| `bcm/set-page-layout` | Astra only. One page's or post's layout: full width (unboxed, no sidebar), boxed, or theme default; optionally hides Astra's title. Elementor pages set to full width also get the Elementor Full Width template. Live pages need `approved: true`. | edit_pages + edit_post |
 | `bcm/purge-page-cache` | Clears Breeze/Varnish and other page caches so changes show. | edit_others_posts (Editor+) |
 | `bcm/find-text` | Read-only. Finds text, or a phone number in any format, across Elementor content of every version (classic, containers, Atomic), headers/footers/popups/global widgets, and normal posts/pages. | edit_pages |
 | `bcm/replace-text` | Replaces it in the posts the person approved (`post_ids` + `approved: true`). Visible text only; tel: links keep their format; revision per page; Elementor styles rebuilt; caches cleared. | edit_pages + edit_others_posts |
@@ -45,14 +49,14 @@ SEO title and meta description stay with Yoast's own ability (`yoast-seo/update-
 
 ## Safety rules built in
 
-- **No delete abilities.** Nothing can be deleted, trashed or unpublished through this plugin.
+- **No delete abilities.** Nothing can be deleted or trashed through this plugin. `unpublish-post` only moves a post back to draft, needs `approved: true`, and is logged.
 - **Drafts first.** `create-post` always makes a draft. Going live happens through `schedule-post` (at least 5 minutes ahead) or `publish-post`, which requires an explicit `approved: true`.
 - **Live edits need an explicit approval flag**, which is logged.
-- **Images:** HTTPS only, from this site or Google Drive / googleusercontent.com (extend with the `bcm_agency_media_hosts` filter). Every redirect hop is re-checked. JPEG, PNG, WebP, GIF only (checked from the file's bytes; no SVG). 10 MB max (5 MB inline).
+- **Images:** HTTPS only, from this site, Google Drive / googleusercontent.com, Marker.io's attachment storage, or Higgsfield's image CDN (`d8j0ntlcm91z4.cloudfront.net` only, not all of CloudFront); extend with the `bcm_agency_media_hosts` filter. Every redirect hop is re-checked. JPEG, PNG, WebP, GIF only (checked from the file's bytes; no SVG). 10 MB max (5 MB inline).
 - **Content is filtered** with `wp_kses_post` even for admins: no scripts, iframes or inline event handlers.
 - **Categories are created deliberately.** Posts with an unknown category name are refused (no accidental near-duplicates); Claude creates it first with `create-term`, which returns an existing match instead of duplicating.
 - **Tracking codes: known services only.** Claude passes an ID (or whatever the PM pasted); the plugin extracts the ID with a strict pattern and writes the official code itself. Pasted markup is never stored. Codes go into WPCode's global Header & Footer fields (never PHP snippets), appended as marked blocks; existing content is never edited. Remove one by deleting its marked block. Duplicate IDs (in WPCode or on the live homepage) are refused. Anything else is added by a developer in WPCode.
-- **Scope:** standard blog posts only. Elementor-built posts can't have their body edited here. Pages stay with Elementor's tools.
+- **Scope:** standard blog posts only. Elementor-built posts can't have their body edited here. Page content stays with Elementor's tools; this plugin only sets a page's Astra layout (`set-page-layout`) and which page is the homepage (`set-homepage`), both with before/after values for undo.
 - **Activity log:** every write is recorded (who, what, which object, result). View it under Tools → BCM Activity Log. It can't be cleared from the plugin.
 
 ## Install (test site first)
@@ -85,6 +89,8 @@ SEO title and meta description stay with Yoast's own ability (`yoast-seo/update-
 18. Delete the test blocks from Header & Footer.
 
 ## Changelog
+
+- **1.3.4:** `bcm/set-homepage`; `bcm/set-page-layout` (Astra full width / boxed / default per page or post); site icon (favicon) in `bcm/update-site-identity`; `bcm/unpublish-post` (back to draft, for checking test posts); Higgsfield image generations allowed as an image source (Higgsfield's CloudFront host only); opt-in Atomic image-fit fix (`bcm/set-atomic-image-fit`): off by default so updating never changes an existing site's look; when on, Atomic images fill the box their element is sized to.
 
 - **1.3.3:** Marker.io feedback widget as a known tracking service; `bcm/remove-tracking-code`; Marker.io comment attachments allowed as an image source (Marker.io's attachment storage only); add/remove images in galleries and carousels, including inside tabs of tabbed galleries; add gallery tabs.
 - **1.3.2:** element-only find/replace (`element_ids`); add/remove items in widget lists (icon lists, FAQs, price lists) including classic widgets; WordPress menu editing; image swaps carry over alt text; update checks every 2 hours plus `bcm/check-for-updates`.
