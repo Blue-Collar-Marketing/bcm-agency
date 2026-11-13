@@ -105,6 +105,7 @@ final class BCM_Hub_Policy {
 		'bcm/schedule-post',
 		'bcm/set-page-layout',
 		'bcm/unpublish-post',
+		'bcm/update-image-alt',
 		'bcm/update-menu-item',
 		'bcm/update-post',
 		'bcm/upload-media',

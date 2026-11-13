@@ -72,6 +72,11 @@ function bcm_agency_collect_image_nodes( array $node, $path, array &$out ) {
 	}
 }
 
+/** The image's alt text in the Media Library (what Elementor shows for library images). */
+function bcm_agency_library_alt( $attachment_id ) {
+	return $attachment_id ? trim( (string) get_post_meta( (int) $attachment_id, '_wp_attachment_image_alt', true ) ) : '';
+}
+
 /** Collects image placements across an element tree. */
 function bcm_agency_collect_images( array $elements, array &$found ) {
 	foreach ( $elements as $el ) {
@@ -191,6 +196,10 @@ function bcm_agency_find_images( array $input ) {
 			if ( ! $f['url'] && $f['id'] ) {
 				$f['url'] = (string) wp_get_attachment_url( $f['id'] );
 			}
+			// Atomic images (and many classic ones) take their alt text from the Media Library.
+			if ( '' === trim( $f['alt'] ) && $f['id'] ) {
+				$f['alt'] = bcm_agency_library_alt( $f['id'] );
+			}
 			$results[] = array_merge(
 				array(
 					'post_id'   => $post->ID,
@@ -264,23 +273,17 @@ function bcm_agency_replace_image( array $input ) {
 	$new_url = (string) wp_get_attachment_url( $new_id );
 	$new_alt = (string) get_post_meta( $new_id, '_wp_attachment_image_alt', true );
 
-	// Alt text: an explicit alt_text wins; otherwise, if the new image has none in the
-	// Media Library, carry over the old image's alt so the page doesn't lose it.
+	// Alt text belongs to the image in the Media Library. The old image's alt is never
+	// copied onto the new one (it may show something else): Claude asks the person.
 	$alt_note = '';
 	if ( ! isset( $input['alt_text'] ) && '' === trim( $new_alt ) ) {
-		$old_alt = '';
-		if ( $before['id'] ) {
-			$old_alt = (string) get_post_meta( $before['id'], '_wp_attachment_image_alt', true );
+		$old_alt = bcm_agency_library_alt( $before['id'] );
+		if ( '' === $old_alt && isset( $node['alt'] ) && is_string( $node['alt'] ) ) {
+			$old_alt = trim( $node['alt'] );
 		}
-		if ( '' === trim( $old_alt ) && isset( $node['alt'] ) && is_string( $node['alt'] ) ) {
-			$old_alt = $node['alt'];
-		}
-		if ( '' !== trim( $old_alt ) ) {
-			update_post_meta( $new_id, '_wp_attachment_image_alt', sanitize_text_field( $old_alt ) );
-			$new_alt  = sanitize_text_field( $old_alt );
-			$alt_note = 'The new image had no alt text, so the previous image\'s alt text was copied to it.';
-		} else {
-			$alt_note = 'Neither image has alt text. Ask the person for a short description and set it with alt_text (good for SEO and accessibility).';
+		$alt_note = 'The new image has no alt text in the Media Library. Ask the person for a short description of what the photo shows, then set it with bcm/update-image-alt.';
+		if ( '' !== $old_alt ) {
+			$alt_note .= ' The previous image\'s alt text was "' . $old_alt . '"; suggest reusing it only if the new image shows the same thing (for example a greyscale or cropped copy).';
 		}
 	}
 
@@ -377,6 +380,44 @@ function bcm_agency_list_media( array $input ) {
 	);
 }
 
+/**
+ * Sets one Media Library image's alt text. Elementor and most themes show the
+ * library alt text, so this changes it everywhere the image appears.
+ */
+function bcm_agency_update_image_alt( array $input ) {
+	$id = isset( $input['attachment_id'] ) ? (int) $input['attachment_id'] : 0;
+	if ( ! $id || ! isset( $input['alt_text'] ) || ! is_string( $input['alt_text'] ) ) {
+		return new WP_Error( 'bcm_bad_input', 'attachment_id and alt_text are required ("" clears the alt text).' );
+	}
+	$alt = trim( sanitize_text_field( $input['alt_text'] ) );
+	if ( strlen( $alt ) > 500 ) {
+		return new WP_Error( 'bcm_bad_input', 'Keep alt text short: one sentence describing what the image shows.' );
+	}
+	if ( is_wp_error( bcm_agency_check_image( $id ) ) ) {
+		return new WP_Error( 'bcm_bad_image', 'attachment_id must be an image in this site\'s Media Library (find it with bcm/list-media or bcm/find-images).' );
+	}
+	if ( ! current_user_can( 'edit_post', $id ) ) {
+		return new WP_Error( 'bcm_forbidden', 'You cannot edit this image.' );
+	}
+	$before = bcm_agency_library_alt( $id );
+	if ( $before === $alt ) {
+		return new WP_Error( 'bcm_no_change', 'That image already has this alt text.' );
+	}
+	if ( empty( $input['approved'] ) ) {
+		return new WP_Error( 'bcm_needs_approval', 'Alt text shows wherever this image is used on the live site. Show the person the image, its current alt text ("' . $before . '") and the new one, then call again with approved: true.' );
+	}
+	update_post_meta( $id, '_wp_attachment_image_alt', $alt );
+	return array(
+		'id'             => $id,
+		'filename'       => basename( (string) get_attached_file( $id ) ),
+		'before'         => $before,
+		'after'          => $alt,
+		'caches_cleared' => bcm_agency_purge_page_cache(),
+		'note'           => 'Updated in the Media Library, so it applies everywhere this image is used.',
+		'_log'           => array( 'before' => $before, 'after' => $alt ),
+	);
+}
+
 function bcm_agency_register_image_abilities() {
 	bcm_agency_register(
 		'bcm/find-images',
@@ -458,6 +499,31 @@ function bcm_agency_register_image_abilities() {
 			'execute_callback'    => 'bcm_agency_replace_image',
 			'permission_callback' => function () {
 				return current_user_can( 'edit_pages' ) && current_user_can( 'edit_others_posts' );
+			},
+		)
+	);
+
+	bcm_agency_register(
+		'bcm/update-image-alt',
+		array(
+			'label'               => 'Set an image\'s alt text',
+			'description'         => 'Sets the alt text of one Media Library image (attachment_id from bcm/list-media or bcm/find-images). Elementor and most themes show the Media Library alt text, so this updates it everywhere the image appears. Describe what the photo shows in one sentence; "" clears it. Requires approved: true; returns before and after; clears page caches.',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'attachment_id' => array( 'type' => 'integer' ),
+					'alt_text'      => array( 'type' => 'string' ),
+					'approved'      => array(
+						'type'        => 'boolean',
+						'description' => 'Set true only after the person approved the new alt text.',
+					),
+				),
+				'required'             => array( 'attachment_id', 'alt_text' ),
+				'additionalProperties' => false,
+			),
+			'execute_callback'    => 'bcm_agency_update_image_alt',
+			'permission_callback' => function () {
+				return current_user_can( 'upload_files' ) && current_user_can( 'edit_others_posts' );
 			},
 		)
 	);

@@ -124,7 +124,7 @@ $add = function ( $id, $title, $file, $alt, $date, $mime = 'image/jpeg', $status
 };
 function get_post( $id ) { return isset( $GLOBALS['posts'][ (int) $id ] ) ? $GLOBALS['posts'][ (int) $id ] : null; }
 function wp_get_attachment_metadata( $id ) { return array( 'width' => 1200, 'height' => 800 ); }
-function get_attached_file( $id ) { return '/uploads/' . $GLOBALS['posts'][ (int) $id ]->file; }
+function get_attached_file( $id ) { return '/uploads/' . ( isset( $GLOBALS['posts'][ (int) $id ] ) ? $GLOBALS['posts'][ (int) $id ]->file : 'img-' . (int) $id . '.jpg' ); }
 $add( 13585, 'Gage Foster Memorial Spikeball Tournament', '2025/06/Gage_Foster_Memorial_Spikeball_Tournament.jpg', 'Spikeball tournament', '2025-06-01 10:00:00' );
 $add( 13590, 'IMG 4471', '2025/06/spikeball-greyscale.jpg', '', '2025-06-02 10:00:00' );
 $add( 17223, 'Gage Foster Memorial Spikeball Tournament', '2026/11/Gage_Foster_Memorial_Spikeball_Tournament-1.jpg', 'Gage Foster Memorial Spikeball Tournament', '2026-11-13 09:00:00' );
@@ -149,6 +149,51 @@ t( 'search wildcards are literal', 0 === $r['count'] && false !== strpos( $r['no
 $r = bcm_agency_list_media( array( 'search' => "x' OR '1'='1" ) );
 t( 'search is safely quoted', 0 === $r['count'] );
 t( 'per_page respected', 2 === bcm_agency_list_media( array( 'per_page' => 2 ) )['count'] );
+
+// ---------------------------------------------------------------------------
+// Alt text (1.4.2): find-images reports the Media Library alt for Atomic images;
+// a swap never copies the old image's alt onto a different photo.
+function esc_sql( $s ) { return addslashes( $s ); }
+function bcm_agency_replace_statuses() { return array( 'publish', 'future', 'draft', 'pending', 'private' ); }
+function bcm_agency_post_label( $p ) { return 'Page'; }
+function get_permalink( $p ) { return 'https://site.test/about/'; }
+$GLOBALS['wpdb']->db->exec( "INSERT INTO wp_posts VALUES (1948, 'page', '', 'publish', 'About', 'about', '2026-01-01 10:00:00')" );
+$GLOBALS['wpdb']->db->exec( "INSERT INTO wp_postmeta VALUES (1948, '_elementor_data', 'x')" );
+$GLOBALS['posts'][1948] = (object) array( 'ID' => 1948, 'post_title' => 'About', 'post_status' => 'publish', 'post_type' => 'page', 'post_date' => '2026-01-01', 'file' => '' );
+$GLOBALS['meta'][2071]['_wp_attachment_image_alt'] = 'Gage Foster Memorial Spikeball Tournament';
+update_post_meta( 1948, '_elementor_data', json_encode( $page ) );
+$r  = bcm_agency_find_images( array( 'post_id' => 1948 ) );
+$v4 = array_values( array_filter( $r['images'], function ( $i ) { return 'v4a' === $i['element_id']; } ) );
+t( 'find-images: Atomic image alt comes from the Media Library', $v4 && 'Gage Foster Memorial Spikeball Tournament' === $v4[0]['alt'], json_encode( $v4 ) );
+$a1 = array_values( array_filter( $r['images'], function ( $i ) { return 'a1' === $i['element_id']; } ) );
+t( 'find-images: an alt stored on the element is kept', $a1 && 'Old' === $a1[0]['alt'] );
+
+// Swap 2071 (has alt) -> 3000 (no alt): nothing copied, Claude told to ask.
+unset( $GLOBALS['meta'][3000]['_wp_attachment_image_alt'] );
+update_post_meta( 1948, '_elementor_data', json_encode( $page ) );
+$r = bcm_agency_replace_image( array( 'post_id' => 1948, 'element_id' => 'v4a', 'field' => 'image.value.src.value', 'new_attachment_id' => 3000, 'approved' => true ) );
+t( 'swap: old alt NOT copied onto the new image', '' === (string) get_post_meta( 3000, '_wp_attachment_image_alt', true ), (string) get_post_meta( 3000, '_wp_attachment_image_alt', true ) );
+t( 'swap: tells Claude to ask, and offers the old alt only for the same picture', is_array( $r ) && false !== strpos( $r['alt_text_note'], 'Ask the person' ) && false !== strpos( $r['alt_text_note'], 'only if the new image shows the same thing' ) && false !== strpos( $r['alt_text_note'], 'Spikeball' ) );
+// With alt_text given, it is set.
+update_post_meta( 1948, '_elementor_data', json_encode( $page ) );
+$r = bcm_agency_replace_image( array( 'post_id' => 1948, 'element_id' => 'v4a', 'field' => 'image.value.src.value', 'new_attachment_id' => 3000, 'approved' => true, 'alt_text' => 'New asphalt driveway' ) );
+t( 'swap with alt_text sets it', 'New asphalt driveway' === get_post_meta( 3000, '_wp_attachment_image_alt', true ) && '' === $r['alt_text_note'] );
+
+// bcm/update-image-alt.
+$GLOBALS['meta'][9]['_wp_attachment_image_alt'] = 'Gage Foster Memorial Spikeball Tournament';
+$r = bcm_agency_update_image_alt( array( 'attachment_id' => 9, 'alt_text' => 'New asphalt driveway with interlock border' ) );
+t( 'update-image-alt needs approved: true, and shows the current alt', is_wp_error( $r ) && 'bcm_needs_approval' === $r->code && false !== strpos( $r->message, 'Spikeball' ) );
+t( 'nothing changed without approval', 'Gage Foster Memorial Spikeball Tournament' === get_post_meta( 9, '_wp_attachment_image_alt', true ) );
+$r = bcm_agency_update_image_alt( array( 'attachment_id' => 9, 'alt_text' => ' New asphalt driveway with interlock border <b>x</b> ', 'approved' => true ) );
+t( 'update-image-alt sets it, with before/after for the log', is_array( $r ) && 'Gage Foster Memorial Spikeball Tournament' === $r['before'] && 'New asphalt driveway with interlock border x' === $r['after'] && $r['_log']['after'] === $r['after'] && get_post_meta( 9, '_wp_attachment_image_alt', true ) === $r['after'] );
+$r = bcm_agency_update_image_alt( array( 'attachment_id' => 9, 'alt_text' => 'New asphalt driveway with interlock border x', 'approved' => true ) );
+t( 'same alt: no change', is_wp_error( $r ) && 'bcm_no_change' === $r->code );
+$r = bcm_agency_update_image_alt( array( 'attachment_id' => 4242, 'alt_text' => 'x', 'approved' => true ) );
+t( 'not an image: refused', is_wp_error( $r ) && 'bcm_bad_image' === $r->code );
+$r = bcm_agency_update_image_alt( array( 'attachment_id' => 9, 'approved' => true ) );
+t( 'alt_text required', is_wp_error( $r ) && 'bcm_bad_input' === $r->code );
+$r = bcm_agency_update_image_alt( array( 'attachment_id' => 9, 'alt_text' => '', 'approved' => true ) );
+t( '"" clears it', is_array( $r ) && '' === get_post_meta( 9, '_wp_attachment_image_alt', true ) );
 
 echo "\n{$pass} passed, {$fail} failed\n";
 exit( $fail ? 1 : 0 );
