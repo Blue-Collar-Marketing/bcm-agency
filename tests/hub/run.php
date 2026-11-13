@@ -328,7 +328,7 @@ t( 'list omits other families', ! isset( $names['core/get-site-info'] ) );
 t( 'list marks confirm tier', isset( $names['bcm/update-form-email'] ) && 'confirm' === $names['bcm/update-form-email'] && 'confirm' === $names['bcm/set-homepage'] );
 t( 'list includes list-tracking-codes (read-only)', isset( $names['bcm/list-tracking-codes'] ) && 'allowed' === $names['bcm/list-tracking-codes'] );
 t( 'list is sorted', $list && array_keys( $names ) === ( function ( $a ) { sort( $a ); return $a; } )( array_keys( $names ) ) );
-$all_real = array( 'add-gallery-image','add-gallery-tab','add-list-item','add-menu-item','add-tracking-code','check-for-updates','create-post','create-term','find-images','find-text','get-activity-log','get-atomic-image-fit','get-post','get-site-identity','list-categories','list-forms','list-items','list-media','list-menus','list-posts','list-tracking-codes','publish-post','purge-page-cache','remove-gallery-image','remove-list-item','remove-menu-item','remove-tracking-code','replace-image','replace-text','schedule-post','set-atomic-image-fit','set-homepage','set-page-layout','unpublish-post','update-form-email','update-menu-item','update-post','update-site-identity','upload-media' );
+$all_real = array( 'add-gallery-image','add-gallery-tab','add-list-item','add-menu-item','add-tracking-code','check-for-updates','create-post','create-term','find-images','find-text','get-activity-log','get-atomic-image-fit','get-post','get-site-identity','list-categories','list-forms','list-items','list-media','list-menus','list-posts','list-tracking-codes','publish-post','purge-page-cache','remove-gallery-image','remove-list-item','remove-menu-item','remove-tracking-code','replace-image','replace-text','schedule-post','set-atomic-image-fit','set-homepage','set-page-layout','unpublish-post','update-form-email','update-image-alt','update-menu-item','update-post','update-site-identity','upload-media' );
 $unlisted = array();
 foreach ( $all_real as $n ) {
 	$tier = BCM_Hub_Policy::tier( 'bcm/' . $n, null );
@@ -336,9 +336,9 @@ foreach ( $all_real as $n ) {
 		$unlisted[] = $n;
 	}
 }
-t( 'all 39 bcm abilities have a reviewed tier', array() === $unlisted, implode( ', ', $unlisted ) );
+t( 'all 40 bcm abilities have a reviewed tier', array() === $unlisted, implode( ', ', $unlisted ) );
 $registered = array_filter( array_keys( $GLOBALS['__abilities'] ), function ( $n ) { return 0 === strpos( $n, 'bcm/' ); } );
-t( 'plugin registers exactly the 39 known bcm abilities', 39 === count( $registered ) && array() === array_diff( $registered, array_map( function ( $n ) { return 'bcm/' . $n; }, $all_real ) ) );
+t( 'plugin registers exactly the 40 known bcm abilities', 40 === count( $registered ) && array() === array_diff( $registered, array_map( function ( $n ) { return 'bcm/' . $n; }, $all_real ) ) );
 $info = data( send( array( 'body' => array( 'action' => 'info', 'ability' => 'bcm/update-post' ) ) ) );
 t( 'info returns schema and tier', $info && isset( $info['ability']['input_schema']['properties'] ) && 'allowed' === $info['ability']['tier'] );
 
