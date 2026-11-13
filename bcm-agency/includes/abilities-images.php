@@ -29,13 +29,33 @@ function bcm_agency_set_typed( &$slot, $value ) {
 }
 
 /**
- * Walks settings and collects image nodes: arrays with both "id" and "url" keys
- * (at any depth). $path is the dotted key path to the node, used to target it later.
+ * Is this settings node an image? Classic widgets and backgrounds store both "id"
+ * and "url". Atomic (V4) images placed from the Media Library by id (as Elementor's
+ * own build tools do) store only the id, typed "image-attachment-id", inside an
+ * "src" slot, with no "url" key at all.
+ */
+function bcm_agency_is_image_node( array $node, $path ) {
+	if ( ! array_key_exists( 'id', $node ) ) {
+		return false;
+	}
+	if ( array_key_exists( 'url', $node ) ) {
+		return true;
+	}
+	if ( is_array( $node['id'] ) && isset( $node['id']['$$type'] ) && 'image-attachment-id' === $node['id']['$$type'] ) {
+		return true;
+	}
+	$segments = array_values( array_diff( explode( '.', (string) $path ), array( 'value', '' ) ) );
+	return $segments && 'src' === end( $segments );
+}
+
+/**
+ * Walks settings and collects image nodes (see bcm_agency_is_image_node) at any
+ * depth. $path is the dotted key path to the node, used to target it later.
  */
 function bcm_agency_collect_image_nodes( array $node, $path, array &$out ) {
-	if ( array_key_exists( 'id', $node ) && array_key_exists( 'url', $node ) ) {
+	if ( bcm_agency_is_image_node( $node, $path ) ) {
 		$id  = bcm_agency_typed_value( $node['id'] );
-		$url = bcm_agency_typed_value( $node['url'] );
+		$url = array_key_exists( 'url', $node ) ? bcm_agency_typed_value( $node['url'] ) : null;
 		if ( ( is_numeric( $id ) && (int) $id > 0 ) || ( is_string( $url ) && '' !== $url ) ) {
 			$out[] = array(
 				'field' => $path,
@@ -228,13 +248,14 @@ function bcm_agency_replace_image( array $input ) {
 		}
 		$node = &$node[ $seg ];
 	}
-	if ( ! is_array( $node ) || ! array_key_exists( 'id', $node ) || ! array_key_exists( 'url', $node ) ) {
+	if ( ! is_array( $node ) || ! bcm_agency_is_image_node( $node, $field ) ) {
 		return new WP_Error( 'bcm_not_found', 'That field is not an image.' );
 	}
 
-	$before = array(
-		'id'  => (int) bcm_agency_typed_value( $node['id'] ),
-		'url' => (string) bcm_agency_typed_value( $node['url'] ),
+	$before_id = (int) bcm_agency_typed_value( $node['id'] );
+	$before    = array(
+		'id'  => $before_id,
+		'url' => array_key_exists( 'url', $node ) && is_string( bcm_agency_typed_value( $node['url'] ) ) ? (string) bcm_agency_typed_value( $node['url'] ) : (string) wp_get_attachment_url( $before_id ),
 	);
 	if ( $before['id'] === $new_id ) {
 		return new WP_Error( 'bcm_no_change', 'That spot already uses this image.' );
@@ -264,8 +285,8 @@ function bcm_agency_replace_image( array $input ) {
 	}
 
 	bcm_agency_set_typed( $node['id'], $new_id );
-	// Atomic library images often store url as null; keep that shape.
-	if ( null !== bcm_agency_typed_value( $node['url'] ) ) {
+	// Atomic library images store url as null, or no url at all; keep that shape.
+	if ( array_key_exists( 'url', $node ) && null !== bcm_agency_typed_value( $node['url'] ) ) {
 		bcm_agency_set_typed( $node['url'], $new_url );
 	}
 	if ( array_key_exists( 'alt', $node ) ) {
@@ -307,35 +328,52 @@ function bcm_agency_replace_image( array $input ) {
 	);
 }
 
+/**
+ * Lists Media Library images, newest first. Reads the database directly (like
+ * find-images) rather than through WP_Query, because media-folder, privacy and
+ * custom snippets often reshape attachment queries and can hide every image.
+ * search matches the title, file name or alt text (e.g. "greyscale").
+ */
 function bcm_agency_list_media( array $input ) {
-	$q = new WP_Query(
-		array(
-			'post_type'      => 'attachment',
-			'post_status'    => 'inherit',
-			'post_mime_type' => 'image',
-			's'              => isset( $input['search'] ) ? sanitize_text_field( $input['search'] ) : '',
-			'posts_per_page' => isset( $input['per_page'] ) ? max( 1, min( 50, (int) $input['per_page'] ) ) : 20,
-			'orderby'        => 'date',
-			'order'          => 'DESC',
-		)
-	);
+	global $wpdb;
+	$per_page = isset( $input['per_page'] ) ? max( 1, min( 50, (int) $input['per_page'] ) ) : 20;
+	$search   = isset( $input['search'] ) ? trim( sanitize_text_field( $input['search'] ) ) : '';
+
+	$sql  = "SELECT p.ID FROM {$wpdb->posts} p
+	         WHERE p.post_type = 'attachment' AND p.post_mime_type LIKE 'image/%' AND p.post_status IN ('inherit', 'private', 'publish')";
+	$args = array();
+	if ( '' !== $search ) {
+		$like  = '%' . $wpdb->esc_like( $search ) . '%';
+		$sql  .= " AND ( p.post_title LIKE %s OR p.post_name LIKE %s
+		           OR EXISTS ( SELECT 1 FROM {$wpdb->postmeta} m WHERE m.post_id = p.ID AND m.meta_key IN ('_wp_attached_file', '_wp_attachment_image_alt') AND m.meta_value LIKE %s ) )";
+		$args  = array( $like, $like, $like );
+	}
+	$sql   .= ' ORDER BY p.post_date DESC, p.ID DESC LIMIT %d';
+	$args[] = $per_page;
+	$ids    = $wpdb->get_col( $wpdb->prepare( $sql, $args ) ); // phpcs:ignore WordPress.DB.PreparedSQL
+
+	$images = array();
+	foreach ( (array) $ids as $id ) {
+		$p = get_post( (int) $id );
+		if ( ! $p ) {
+			continue;
+		}
+		$meta     = wp_get_attachment_metadata( $p->ID );
+		$images[] = array(
+			'id'       => $p->ID,
+			'title'    => get_the_title( $p ),
+			'filename' => basename( (string) get_attached_file( $p->ID ) ),
+			'url'      => wp_get_attachment_url( $p->ID ),
+			'alt'      => (string) get_post_meta( $p->ID, '_wp_attachment_image_alt', true ),
+			'width'    => isset( $meta['width'] ) ? (int) $meta['width'] : 0,
+			'height'   => isset( $meta['height'] ) ? (int) $meta['height'] : 0,
+			'uploaded' => $p->post_date,
+		);
+	}
 	return array(
-		'images' => array_map(
-			function ( $p ) {
-				$meta = wp_get_attachment_metadata( $p->ID );
-				return array(
-					'id'       => $p->ID,
-					'title'    => get_the_title( $p ),
-					'filename' => basename( (string) get_attached_file( $p->ID ) ),
-					'url'      => wp_get_attachment_url( $p->ID ),
-					'alt'      => (string) get_post_meta( $p->ID, '_wp_attachment_image_alt', true ),
-					'width'    => isset( $meta['width'] ) ? (int) $meta['width'] : 0,
-					'height'   => isset( $meta['height'] ) ? (int) $meta['height'] : 0,
-					'uploaded' => $p->post_date,
-				);
-			},
-			$q->posts
-		),
+		'images' => $images,
+		'count'  => count( $images ),
+		'note'   => $images ? '' : ( '' !== $search ? 'No images match "' . $search . '" in the title, file name or alt text. Try part of the file name.' : 'The Media Library has no images.' ),
 	);
 }
 
@@ -372,7 +410,7 @@ function bcm_agency_register_image_abilities() {
 		'bcm/list-media',
 		array(
 			'label'               => 'List Media Library images',
-			'description'         => 'Read-only. Lists recent Media Library images (newest first), optionally filtered by search text, with id, file name, url, alt text and dimensions. Use to find the new image\'s attachment id after it is uploaded.',
+			'description'         => 'Read-only. Lists Media Library images (newest first) with id, file name, url, alt text and dimensions. search matches the title, file name or alt text, e.g. "greyscale" or "spikeball", so use it to find an existing version of an image (a greyscale or older copy) or a new upload\'s attachment id.',
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array(

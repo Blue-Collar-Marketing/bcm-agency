@@ -200,7 +200,7 @@ t( 'maybe_upgrade created nonce table', $wpdb->nonce_table_exists );
 t( 'log table has via + actor columns', (bool) preg_match( '/via varchar.*actor varchar/s', implode( "\n", $wpdb->ddl ) ) );
 t( 'DB_VERSION bumped', '2' === BCM_Log::DB_VERSION && '2' === get_option( 'bcm_agency_log_db_version' ) );
 t( 'placeholder key ignored', ! isset( BCM_Hub::trusted_keys( 'signing' )['bad-placeholder'] ) );
-t( 'version is 1.4.0', '1.4.0' === BCM_AGENCY_VERSION );
+t( 'version: header and constant match', (bool) preg_match( '/Version:\s+' . preg_quote( BCM_AGENCY_VERSION, '/' ) . '\s/', file_get_contents( $plugin . '/bcm-agency.php' ) ) && version_compare( BCM_AGENCY_VERSION, '1.4.0', '>=' ) );
 
 // Unsigned and inert.
 $req = new WP_REST_Request( 'POST', '/bcm-agency/v1/hub' );
@@ -216,7 +216,7 @@ t( 'handle() without a passed check refuses', 'bcm_hub_unsigned' === code( BCM_H
 $r = send();
 is_code( 'ping ok', $r, 'ok' );
 $d = data( $r );
-t( 'ping reports version, home host, user ready', $d && '1.4.0' === $d['plugin_version'] && 'kozyhomes.ca' === $d['home_host'] && true === $d['hub_user_ready'] );
+t( 'ping reports version, home host, user ready', $d && BCM_AGENCY_VERSION === $d['plugin_version'] && 'kozyhomes.ca' === $d['home_host'] && true === $d['hub_user_ready'] );
 t( 'ping counts abilities by family', $d && $d['abilities']['bcm'] > 30 && $d['abilities']['elementor'] >= 3 && 1 === $d['abilities']['yoast-seo'] );
 t( 'ping does not leave a user signed in', 0 === get_current_user_id() );
 t( 'last contact recorded', (int) get_option( 'bcm_agency_hub_last_contact' ) > 0 );

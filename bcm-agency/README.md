@@ -1,4 +1,4 @@
-# BCM Agency Tools (v1.4.0)
+# BCM Agency Tools (v1.4.1)
 
 Narrow, logged abilities that let Blue Collar Marketing's Claude workflows handle blog posts, images and site identity on client WordPress sites. They appear in Claude automatically through the site's existing WordPress connector (WordPress 6.9+ Abilities API + MCP Adapter), and from 1.4 also through the **BCM Hub** (one connector for every site; see "BCM Hub access" below).
 
@@ -113,6 +113,7 @@ Other families (`core/`, `imagify/`…) are refused. **Write requests are also s
 
 ## Changelog
 
+- **1.4.1:** Find images and Swap an image now see Atomic (V4) images placed from the Media Library by id, which is how Elementor's own build tools store them (no url saved); swaps keep Elementor's stored shape. List Media Library images now reads the library directly, so other plugins or snippets can't hide it (it came back empty on some sites), and its search matches file names and alt text as well as titles (e.g. "greyscale").
 - **1.4.0:** BCM Hub access: one signed endpoint that accepts only requests signed by the hub's key (5-minute window, single use, bound to this site) and runs allowed bcm/, elementor/ and yoast-seo/ abilities as an administrator without unfiltered HTML or plugin and user management; code widgets, scripts and custom CSS never allowed; tracking codes, form recipients, form submissions and site-wide settings need a second confirmation; on/off switch and acting user under Tools → BCM Activity Log; activity log shows "via hub" and who asked (anonymous ID). Nothing changes for the existing per-site connector.
 - **1.3.4:** `bcm/set-homepage`; `bcm/set-page-layout` (Astra full width / boxed / default per page or post); site icon (favicon) in `bcm/update-site-identity`; `bcm/unpublish-post` (back to draft, for checking test posts); Higgsfield image generations allowed as an image source (Higgsfield's CloudFront host only); opt-in Atomic image-fit fix (`bcm/set-atomic-image-fit`): off by default so updating never changes an existing site's look; when on, Atomic images fill the box their element is sized to.
 
