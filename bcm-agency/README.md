@@ -1,6 +1,6 @@
-# BCM Agency Tools (v1.3.4)
+# BCM Agency Tools (v1.4.0)
 
-Narrow, logged abilities that let Blue Collar Marketing's Claude workflows handle blog posts, images and site identity on client WordPress sites. They appear in Claude automatically through the site's existing WordPress connector (WordPress 6.9+ Abilities API + MCP Adapter). Nothing changes on the Claude side.
+Narrow, logged abilities that let Blue Collar Marketing's Claude workflows handle blog posts, images and site identity on client WordPress sites. They appear in Claude automatically through the site's existing WordPress connector (WordPress 6.9+ Abilities API + MCP Adapter), and from 1.4 also through the **BCM Hub** (one connector for every site; see "BCM Hub access" below).
 
 ## Abilities
 
@@ -58,6 +58,29 @@ SEO title and meta description stay with Yoast's own ability (`yoast-seo/update-
 - **Tracking codes: known services only.** Claude passes an ID (or whatever the PM pasted); the plugin extracts the ID with a strict pattern and writes the official code itself. Pasted markup is never stored. Codes go into WPCode's global Header & Footer fields (never PHP snippets), appended as marked blocks; existing content is never edited. Remove one by deleting its marked block. Duplicate IDs (in WPCode or on the live homepage) are refused. Anything else is added by a developer in WPCode.
 - **Scope:** standard blog posts only. Elementor-built posts can't have their body edited here. Page content stays with Elementor's tools; this plugin only sets a page's Astra layout (`set-page-layout`) and which page is the homepage (`set-homepage`), both with before/after values for undo.
 - **Activity log:** every write is recorded (who, what, which object, result). View it under Tools → BCM Activity Log. It can't be cleared from the plugin.
+- **Hub requests are signed, single-use and site-bound.** Without a valid hub signature the hub headers do nothing; normal WordPress sign-in still applies everywhere. Code widgets, custom CSS and arbitrary scripts can never be added through the hub; tracking codes (known services only) need Chris's second confirmation.
+
+## BCM Hub access (1.4)
+
+One REST route, `POST /wp-json/bcm-agency/v1/hub`, accepts requests from the BCM Hub (one Claude connector for all our sites). It ignores anything not signed with a key in `includes/hub-keys.php` (public keys only; the private keys live in Cloudflare). Wire format and test vectors: `docs/HUB-PROTOCOL.md` in the repo.
+
+**Checks, in order:** hub access on; key trusted; Ed25519 signature valid; time within 5 minutes; nonce never seen (kept 15 minutes); signed for this site's own host; ability allowed. Any failure is refused and logged (refusals capped at 50 per 10 minutes).
+
+**What can run:**
+
+| Tier | Abilities | Through the hub |
+|---|---|---|
+| Excluded | `elementor/manage-form-submissions` (changing clients' leads), `elementor/manage-experiments`, `elementor/enable-agent-ready` (developer switches) | Never |
+| Second confirmation | `bcm/update-form-email`, `bcm/add-tracking-code` (official code for known services only; a pasted provider snippet is only read for its ID), `elementor/list-form-submissions` (clients' leads), `bcm/set-homepage`, `bcm/update-site-identity`, `bcm/set-atomic-image-fit`; `elementor/manage-global-variable`, `manage-woocommerce-settings`; Yoast site-wide switches and `update-site-representation`; any **unreviewed** write ability in an allowed family (abilities served as MCP resources, such as Elementor's reference documents, count as read-only) | Only with a valid approval signature (Chris approves in Slack) |
+| Allowed | Every other `bcm/`, `elementor/` and `yoast-seo/` ability, including `bcm/remove-tracking-code`, Elementor site parts (headers, footers, popups; Pro Custom Code snippets are refused), media uploads, and global classes and default styles | Yes; each ability's own `approved: true` rule still applies |
+
+Other families (`core/`, `imagify/`…) are refused. **Write requests are also scanned** (except `bcm/add-tracking-code`, which never writes pasted markup): script, iframe, style and form tags, event handlers, `javascript:` and non-image `data:` URLs, PHP, Elementor HTML/code/shortcode widgets and dynamic tags, and custom CSS / custom attribute fields are refused; Elementor form email, webhook and redirect fields need a second confirmation. Read-only abilities aren't scanned.
+
+**Runs as** the administrator chosen under Tools → BCM Activity Log → Hub access (default: the oldest administrator), for that request only, **without** `unfiltered_html`, uploads of unfiltered files, or plugin, theme, user or core management. If the chosen account isn't an administrator, requests are refused rather than run as someone else.
+
+**Switches:** untick "Allow requests from the BCM Hub" on that screen, or add `define( 'BCM_AGENCY_HUB_DISABLED', true );` to wp-config.php. A release with an empty `hub-keys.php` disconnects every site. Changes to the switch are logged.
+
+**Log:** hub rows show "Via: hub · <ID>". The ID is the hub's anonymous code for the person; the hub's log maps it to a name. Approved and second-confirmation flags are in the details.
 
 ## Install (test site first)
 
@@ -90,6 +113,7 @@ SEO title and meta description stay with Yoast's own ability (`yoast-seo/update-
 
 ## Changelog
 
+- **1.4.0:** BCM Hub access: one signed endpoint that accepts only requests signed by the hub's key (5-minute window, single use, bound to this site) and runs allowed bcm/, elementor/ and yoast-seo/ abilities as an administrator without unfiltered HTML or plugin and user management; code widgets, scripts and custom CSS never allowed; tracking codes, form recipients, form submissions and site-wide settings need a second confirmation; on/off switch and acting user under Tools → BCM Activity Log; activity log shows "via hub" and who asked (anonymous ID). Nothing changes for the existing per-site connector.
 - **1.3.4:** `bcm/set-homepage`; `bcm/set-page-layout` (Astra full width / boxed / default per page or post); site icon (favicon) in `bcm/update-site-identity`; `bcm/unpublish-post` (back to draft, for checking test posts); Higgsfield image generations allowed as an image source (Higgsfield's CloudFront host only); opt-in Atomic image-fit fix (`bcm/set-atomic-image-fit`): off by default so updating never changes an existing site's look; when on, Atomic images fill the box their element is sized to.
 
 - **1.3.3:** Marker.io feedback widget as a known tracking service; `bcm/remove-tracking-code`; Marker.io comment attachments allowed as an image source (Marker.io's attachment storage only); add/remove images in galleries and carousels, including inside tabs of tabbed galleries; add gallery tabs.
