@@ -5,7 +5,9 @@ Builds a release of the BCM Agency Tools plugin.
     python3 scripts/build_release.py 1.3.0
 
 Checks that the version in the plugin header, the BCM_AGENCY_VERSION constant
-and the requested version all match, lints every PHP file, then writes:
+and the requested version all match, lints every PHP file, checks that
+hub-keys.php holds real public keys (no placeholders, never a private key),
+then writes:
 
     dist/bcm-agency/bcm-agency-1.3.0.zip
     dist/bcm-agency/info.json
@@ -64,6 +66,25 @@ def lint():
         fail("PHP syntax errors:\n" + "\n".join(bad))
 
 
+def check_hub_keys():
+    """hub-keys.php must hold real PUBLIC keys: no placeholders, never a private key."""
+    path = os.path.join(PLUGIN_DIR, "includes", "hub-keys.php")
+    if not os.path.exists(path):
+        return
+    src = open(path, encoding="utf-8").read()
+    # Ed25519 private keys exported as PKCS#8 base64 start with this.
+    if "MC4CAQAwBQYDK2Vw" in src or "PRIVATE KEY" in src:
+        fail("hub-keys.php contains what looks like a PRIVATE key. Remove it, do not commit it, and generate new keys.")
+    if re.search(r"'REPLACE_WITH_[A-Z0-9_]*'", src):
+        fail("bcm-agency/includes/hub-keys.php still has placeholder keys. Put the real PUBLIC keys in before releasing.")
+    entries = re.findall(r"'([A-Za-z0-9._-]+)'\s*=>\s*'([^']*)'", src)
+    for key_id, value in entries:
+        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", value):
+            fail(f"hub-keys.php: key '{key_id}' is not a 43-character base64url public key.")
+    if not entries:
+        print("NOTE: hub-keys.php trusts no keys. Sites on this version will refuse every hub request.")
+
+
 def changelog_html(version):
     """Turns the README's '## Changelog' bullets into simple HTML for the update screen."""
     readme = os.path.join(PLUGIN_DIR, "README.md")
@@ -110,6 +131,7 @@ def main():
         fail(f"Version mismatch. Tag: {version}, plugin header: {header}, BCM_AGENCY_VERSION: {const}. Update both in bcm-agency.php.")
 
     lint()
+    check_hub_keys()
     notes = changelog_html(version)
 
     out_dir = os.path.join(ROOT, "dist", "bcm-agency")
