@@ -2,7 +2,8 @@
 #
 #   git tag v1.3.0 && git push origin v1.3.0
 #
-# 1. build:   checks versions, lints PHP, builds the zip and info.json (no secrets).
+# 1. build:   runs the hub tests, checks versions, lints PHP, checks hub keys,
+#            builds the zip and info.json (no secrets).
 # 2. publish: waits for a second person to approve in the "updates" environment,
 #             then copies the files to the public updates repo (GitHub Pages)
 #             using a fine-grained token that can only write to that repo.
@@ -28,6 +29,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+
+      - name: Hub signature tests
+        # Signed-request checks (tampering, replay, wrong host, excluded abilities...).
+        # Uses its own throwaway test keys; any failure stops the release here.
+        run: php tests/hub/run.php
 
       - name: Build release
         run: python3 scripts/build_release.py "${GITHUB_REF_NAME#v}"
