@@ -5,6 +5,7 @@ Source for **BCM Agency Tools**, Blue Collar Marketing's WordPress plugin that g
 - Plugin code and its own README: [`bcm-agency/`](bcm-agency/)
 - How releases reach client sites: [`docs/RELEASING.md`](docs/RELEASING.md)
 - Release automation: [`.github/workflows/release.yml`](.github/workflows/release.yml), [`scripts/build_release.py`](scripts/build_release.py)
+- BCM Hub wire format: [`docs/HUB-PROTOCOL.md`](docs/HUB-PROTOCOL.md); tests: `php tests/hub/run.php` (run automatically before every release)
 
 Every change goes through a pull request. Every release needs a second person's approval before it's published.
 
