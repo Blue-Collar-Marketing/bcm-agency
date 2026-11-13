@@ -35,6 +35,10 @@ jobs:
         # Uses its own throwaway test keys; any failure stops the release here.
         run: php tests/hub/run.php
 
+      - name: Image find and swap tests
+        # Classic, Atomic (V4) and background images, including Atomic images stored by id only.
+        run: php tests/images/run.php
+
       - name: Build release
         run: python3 scripts/build_release.py "${GITHUB_REF_NAME#v}"
 
