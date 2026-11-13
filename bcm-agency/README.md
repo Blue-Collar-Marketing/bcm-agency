@@ -1,4 +1,4 @@
-# BCM Agency Tools (v1.4.1)
+# BCM Agency Tools (v1.4.2)
 
 Narrow, logged abilities that let Blue Collar Marketing's Claude workflows handle blog posts, images and site identity on client WordPress sites. They appear in Claude automatically through the site's existing WordPress connector (WordPress 6.9+ Abilities API + MCP Adapter), and from 1.4 also through the **BCM Hub** (one connector for every site; see "BCM Hub access" below).
 
@@ -31,6 +31,7 @@ Narrow, logged abilities that let Blue Collar Marketing's Claude workflows handl
 | `bcm/find-images` | Read-only. Where an image is used (Image/Image Box widgets, backgrounds, galleries, Atomic images), by file name, attachment id, or every image on a page. | edit_pages |
 | `bcm/list-media` | Read-only. Recent Media Library images with ids, to pick the replacement. | upload_files |
 | `bcm/replace-image` | Swaps one placement to another Media Library image (id, url and alt together). Needs `approved: true`; revision for undo; old image never deleted. | edit_pages + edit_others_posts |
+| `bcm/update-image-alt` | Sets one Media Library image's alt text (applies everywhere the image is used). Needs `approved: true`; before and after logged. | upload_files + edit_others_posts |
 | `bcm/list-items` | Read-only. A widget's repeating lists (Icon List bullets, Toggle/Accordion/FAQ items, Price List rows, tabs, slides) with each item's _id and text. | edit_pages |
 | `bcm/add-list-item` | Adds an item by copying an existing one (same icon and styling), sets its text/link, inserts at any position. Classic widgets included. Needs `approved: true`. | edit_pages + edit_others_posts |
 | `bcm/remove-list-item` | Removes one item by _id (never the last). Needs `approved: true`. | edit_pages + edit_others_posts |
@@ -113,6 +114,7 @@ Other families (`core/`, `imagify/`…) are refused. **Write requests are also s
 
 ## Changelog
 
+- **1.4.2:** New Set an image's alt text (bcm/update-image-alt). Swap an image no longer copies the old image's alt text onto the new one (it may show something else); it asks for a description instead. Find images reports the Media Library alt text for Atomic images.
 - **1.4.1:** Find images and Swap an image now see Atomic (V4) images placed from the Media Library by id, which is how Elementor's own build tools store them (no url saved); swaps keep Elementor's stored shape. List Media Library images now reads the library directly, so other plugins or snippets can't hide it (it came back empty on some sites), and its search matches file names and alt text as well as titles (e.g. "greyscale").
 - **1.4.0:** BCM Hub access: one signed endpoint that accepts only requests signed by the hub's key (5-minute window, single use, bound to this site) and runs allowed bcm/, elementor/ and yoast-seo/ abilities as an administrator without unfiltered HTML or plugin and user management; code widgets, scripts and custom CSS never allowed; tracking codes, form recipients, form submissions and site-wide settings need a second confirmation; on/off switch and acting user under Tools → BCM Activity Log; activity log shows "via hub" and who asked (anonymous ID). Nothing changes for the existing per-site connector.
 - **1.3.4:** `bcm/set-homepage`; `bcm/set-page-layout` (Astra full width / boxed / default per page or post); site icon (favicon) in `bcm/update-site-identity`; `bcm/unpublish-post` (back to draft, for checking test posts); Higgsfield image generations allowed as an image source (Higgsfield's CloudFront host only); opt-in Atomic image-fit fix (`bcm/set-atomic-image-fit`): off by default so updating never changes an existing site's look; when on, Atomic images fill the box their element is sized to.
