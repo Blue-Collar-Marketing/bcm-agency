@@ -21,20 +21,48 @@ function bcm_agency_redirection_missing() {
 	return new WP_Error( 'bcm_no_redirection', 'The Redirection plugin is not active on this site. Install and activate it (wordpress.org/plugins/redirection), open Tools → Redirection once to finish its setup, then try again.' );
 }
 
+/** Do Redirection's database tables exist? */
+function bcm_agency_redirection_tables_exist() {
+	global $wpdb;
+	$table = $wpdb->prefix . 'redirection_groups';
+	return $table === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+}
+
+/**
+ * Runs Redirection's own installer when Redirection says it still needs
+ * installing: what clicking through its setup screen does (creates its tables
+ * and default groups). Redirection only does this when that screen is opened,
+ * so sites where it was activated from Cloudways or WP-CLI never have tables.
+ */
+function bcm_agency_redirection_install_if_needed() {
+	if ( ! class_exists( '\Redirection\Database\Status' ) || ! class_exists( '\Redirection\Database\Schema\Latest' ) ) {
+		return false;
+	}
+	$status = new \Redirection\Database\Status();
+	if ( ! $status->needs_installing() ) {
+		return false;
+	}
+	$done = ( new \Redirection\Database\Schema\Latest() )->install();
+	return true === $done;
+}
+
 /**
  * The first enabled group for ordinary WordPress redirects (Redirection's
- * "Redirections" group). When Redirection's tables exist but nobody has opened
- * its setup screen yet, the group is created here exactly as that setup does.
+ * "Redirections" group), finishing Redirection's setup first if it was never
+ * run, and creating the group as that setup does if it is missing.
  */
 function bcm_agency_redirect_group() {
 	global $wpdb;
+	if ( ! bcm_agency_redirection_tables_exist() && ! ( bcm_agency_redirection_install_if_needed() && bcm_agency_redirection_tables_exist() ) ) {
+		return 0;
+	}
 	$table = $wpdb->prefix . 'redirection_groups';
 	$id    = $wpdb->get_var( "SELECT id FROM {$table} WHERE module_id = 1 AND status = 'enabled' ORDER BY position ASC, id ASC LIMIT 1" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	if ( $id ) {
 		return (int) $id;
 	}
-	if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) || ! is_callable( array( 'Red_Group', 'create' ) ) ) {
-		return 0; // Redirection's tables are not set up: its setup screen must run first.
+	if ( ! is_callable( array( 'Red_Group', 'create' ) ) ) {
+		return 0;
 	}
 	$group = Red_Group::create( 'Redirections', 1 );
 	return ( $group && is_callable( array( $group, 'get_id' ) ) ) ? (int) $group->get_id() : 0;
@@ -138,7 +166,7 @@ function bcm_agency_redirect_prepare( $source, $target, $code = 301 ) {
 	}
 	$group = bcm_agency_redirect_group();
 	if ( ! $group ) {
-		return new WP_Error( 'bcm_no_redirection', 'Redirection is installed but its database is not set up yet. Open Tools → Redirection once in wp-admin to finish its setup, then try again.' );
+		return new WP_Error( 'bcm_no_redirection', 'Redirection could not finish setting up its database here. Open Tools → Redirection once in wp-admin to finish its setup, then try again.' );
 	}
 	return array(
 		'source' => $source,
@@ -215,6 +243,13 @@ function bcm_agency_add_redirect( array $input ) {
 function bcm_agency_list_redirects( array $input ) {
 	if ( ! bcm_agency_redirection_ready() ) {
 		return bcm_agency_redirection_missing();
+	}
+	if ( ! bcm_agency_redirection_tables_exist() ) {
+		return array(
+			'redirects' => array(),
+			'count'     => 0,
+			'note'      => 'Redirection is active but its setup was never finished, so it has no redirects yet. Adding the first redirect (bcm/add-redirect, or bcm/trash-post with redirect_to) finishes its setup automatically.',
+		);
 	}
 	global $wpdb;
 	$per_page = isset( $input['per_page'] ) ? max( 1, min( 100, (int) $input['per_page'] ) ) : 50;
