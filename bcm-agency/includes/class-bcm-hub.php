@@ -294,9 +294,23 @@ final class BCM_Hub {
 			$context['tier'] = $tier;
 		}
 
+		// Going live needs Chris: a first publish through Elementor, or a publish
+		// status set through Elementor's page settings. Edits to live pages do not.
+		$status_why = '';
+		if ( BCM_Hub_Policy::ALLOWED === $context['tier'] ) {
+			$status_why = self::status_change_reason( $name, $payload['input'] );
+			if ( '' !== $status_why ) {
+				$context['tier'] = BCM_Hub_Policy::CONFIRM;
+			}
+		}
+
 		if ( BCM_Hub_Policy::CONFIRM === $context['tier'] ) {
-			if ( isset( $scan ) && '' !== $scan['reason'] ) {
+			if ( '' !== $status_why ) {
+				$why = $status_why;
+			} elseif ( isset( $scan ) && '' !== $scan['reason'] ) {
 				$why = $scan['reason'];
+			} elseif ( 'bcm/add-html-embed' === $name ) {
+				$why = 'it adds HTML or JavaScript code to a page';
 			} elseif ( 'bcm/update-form-email' === $name ) {
 				$why = 'it changes where a form sends its emails';
 			} elseif ( 'bcm/add-tracking-code' === $name ) {
@@ -326,6 +340,34 @@ final class BCM_Hub {
 	 * Second confirmation: a separate signature from the approval key over this
 	 * exact request (same nonce, actor, host and body).
 	 */
+	/**
+	 * Why an otherwise allowed change needs a second confirmation because it
+	 * takes content live or off a launched site, or '' when it does not.
+	 * Pre-launch sites (Cloudways temporary address) never need one for this;
+	 * blog posts go live with the person's confirmation alone; edits to pages
+	 * that are already live are not held.
+	 */
+	private static function status_change_reason( $name, $input ) {
+		if ( BCM_Hub_Policy::is_prelaunch_host( wp_parse_url( home_url(), PHP_URL_HOST ) ) ) {
+			return '';
+		}
+		$input = is_array( $input ) ? $input : array();
+		$post  = isset( $input['post_id'] ) ? get_post( (int) $input['post_id'] ) : null;
+		$page  = $post && 'post' !== $post->post_type; // Pages, templates and other content, not blog posts.
+		switch ( $name ) {
+			case 'bcm/publish-post':
+				return $page ? 'it publishes a new page on the live site' : '';
+			case 'bcm/trash-post':
+				return $post ? 'it moves a ' . ( $page ? 'page' : 'blog post' ) . ' on the live site to the trash' : '';
+			case 'elementor/publish-document':
+				return ( $page && 'publish' !== $post->post_status ) ? 'it publishes a page that is not live yet' : '';
+			case 'elementor/update-page-settings':
+				$settings = isset( $input['settings'] ) && is_array( $input['settings'] ) ? $input['settings'] : array();
+				return ( $page && array_key_exists( 'post_status', $settings ) ) ? "it changes a page's publish status on the live site" : '';
+		}
+		return '';
+	}
+
 	private static function verify_approval( array $h, $host, $body_hash, $why ) {
 		if ( '' === $h['approval_key'] && '' === $h['approval'] ) {
 			return self::error( 'bcm_hub_needs_confirmation', 'This change needs a second confirmation before it can run.', 403, array( 'reason' => $why ) );
@@ -575,6 +617,14 @@ final class BCM_Hub {
 			}
 		}
 		return $allcaps;
+	}
+
+	/**
+	 * True while an ability runs for the hub after Chris's second confirmation
+	 * (approval signature) was verified for this exact request.
+	 */
+	public static function running_confirmed() {
+		return is_array( self::$running ) && ! empty( self::$running['confirmed'] );
 	}
 
 	/**
