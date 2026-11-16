@@ -77,6 +77,43 @@ function bcm_agency_get_editable_post( $post_id ) {
 	return $post;
 }
 
+/**
+ * A blog post or page this user may edit (not in the trash).
+ */
+function bcm_agency_get_editable_content( $post_id ) {
+	$post = get_post( (int) $post_id );
+	if ( ! $post || ! in_array( $post->post_type, array( 'post', 'page' ), true ) ) {
+		return new WP_Error( 'bcm_not_found', 'No blog post or page with that ID.' );
+	}
+	if ( 'trash' === $post->post_status ) {
+		return new WP_Error( 'bcm_trashed', 'That item is in the trash.' );
+	}
+	if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+		return new WP_Error( 'bcm_forbidden', 'You are not allowed to edit this item.' );
+	}
+	return $post;
+}
+
+/**
+ * Pages the whole site depends on, which are never unpublished, made private
+ * or trashed from here: '' when the page is not one of them.
+ */
+function bcm_agency_protected_page_reason( WP_Post $post ) {
+	if ( 'page' !== $post->post_type ) {
+		return '';
+	}
+	if ( (int) get_option( 'page_on_front' ) === (int) $post->ID ) {
+		return "it is the site's homepage";
+	}
+	if ( (int) get_option( 'page_for_posts' ) === (int) $post->ID ) {
+		return "it is the site's blog page";
+	}
+	if ( (int) get_option( 'wp_page_for_privacy_policy' ) === (int) $post->ID ) {
+		return "it is the site's privacy policy page";
+	}
+	return '';
+}
+
 function bcm_agency_is_elementor_post( $post_id ) {
 	return 'builder' === get_post_meta( (int) $post_id, '_elementor_edit_mode', true );
 }

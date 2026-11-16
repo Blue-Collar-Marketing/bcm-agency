@@ -105,6 +105,9 @@ bcm_agency_register( 'bcm/remove-tracking-code', array( 'label' => 'Remove code'
 $reg( 'elementor/manage-site-parts', false );
 $reg( 'elementor/list-form-submissions', true );
 $reg( 'elementor/manage-experiments', false );
+$reg( 'elementor/enable-elementor-abilities', false );
+$reg( 'elementor/publish-document', false );
+$reg( 'elementor/update-page-settings', false );
 $reg( 'elementor/get-page-structure', true, false ); // No input schema at all.
 $reg( 'elementor/new-thing', false );
 $reg( 'elementor/new-read', true );
@@ -315,6 +318,63 @@ is_code( 'remove tracking code runs without confirmation', send( array( 'body' =
 // Site parts: headers and footers allowed; Elementor Pro Custom Code snippets refused.
 is_code( 'site parts: header allowed', send( array( 'body' => run_body( 'elementor/manage-site-parts', array( 'operations' => array( array( 'action' => 'create', 'type' => 'header', 'conditions' => array( 'include/general' ) ) ) ) ) ) ), 'ok' );
 is_code( 'site parts: custom code snippet refused', send( array( 'body' => run_body( 'elementor/manage-site-parts', array( 'operations' => array( array( 'action' => 'create', 'type' => 'code_snippet' ) ) ) ) ) ), 'bcm_hub_excluded' );
+// Switching Elementor's tools on is reviewed and allowed (Elementor itself requires consent).
+is_code( "Elementor's tool switch runs without a second confirmation", send( array( 'body' => run_body( 'elementor/enable-elementor-abilities', array( 'consent' => true ) ) ) ), 'ok' );
+
+// Going live needs Chris (1.4.3): a first publish through Elementor, a status set
+// through page settings, publish/schedule/trash and HTML embeds; private does not.
+$GLOBALS['__posts'][501] = (object) array( 'ID' => 501, 'post_status' => 'draft', 'post_type' => 'page' );
+$GLOBALS['__posts'][502] = (object) array( 'ID' => 502, 'post_status' => 'publish', 'post_type' => 'page' );
+$r = send( array( 'body' => run_body( 'elementor/publish-document', array( 'post_id' => 501 ) ) ) );
+is_code( 'first publish of a draft page through Elementor: held', $r, 'bcm_hub_needs_confirmation' );
+t( 'first publish: reason says so', is_wp_error( $r ) && 'it publishes a page that is not live yet' === $r->get_error_data()['reason'] );
+is_code( 'first publish with confirmation runs', send( array( 'body' => run_body( 'elementor/publish-document', array( 'post_id' => 501 ) ), 'approval' => array() ) ), 'ok' );
+is_code( 'pushing edits to a live page: no confirmation', send( array( 'body' => run_body( 'elementor/publish-document', array( 'post_id' => 502 ) ) ) ), 'ok' );
+$r = send( array( 'body' => run_body( 'elementor/update-page-settings', array( 'post_id' => 501, 'settings' => array( 'post_status' => 'publish' ) ) ) ) );
+is_code( 'publish status through page settings: held', $r, 'bcm_hub_needs_confirmation' );
+is_code( 'other page settings: no confirmation', send( array( 'body' => run_body( 'elementor/update-page-settings', array( 'post_id' => 501, 'settings' => array( 'hide_title' => 'yes' ) ) ) ) ), 'ok' );
+$names = array_column( data( send( array( 'body' => array( 'action' => 'list' ) ) ) )['abilities'], 'tier', 'name' );
+t( 'bcm/add-html-embed needs confirmation', 'confirm' === $names['bcm/add-html-embed'] );
+foreach ( array( 'bcm/publish-post', 'bcm/schedule-post', 'bcm/trash-post', 'bcm/make-private', 'bcm/unpublish-post', 'bcm/add-redirect', 'bcm/remove-redirect', 'bcm/list-redirects' ) as $n ) {
+	t( "$n is allowed (the site decides per post)", 'allowed' === $names[ $n ] );
+}
+$embed = array( 'post_id' => 502, 'html' => '<div id="calc"></div><script>document.getElementById("calc").textContent="ok";</script>', 'approved' => true );
+$not_held = function ( $r ) { return ! is_wp_error( $r ) || 0 !== strpos( $r->get_error_code(), 'bcm_hub_' ); };
+
+// Live site (kozyhomes.ca): pages going live or anything trashed needs Chris; blog posts don't.
+$GLOBALS['__posts'][503] = (object) array( 'ID' => 503, 'post_status' => 'draft', 'post_type' => 'page' );
+$GLOBALS['__posts'][504] = (object) array( 'ID' => 504, 'post_status' => 'draft', 'post_type' => 'post' );
+$r = send( array( 'body' => run_body( 'bcm/publish-post', array( 'post_id' => 503 ) ) ) );
+is_code( 'live: publishing a page is held', $r, 'bcm_hub_needs_confirmation' );
+t( 'live: reason names the page', is_wp_error( $r ) && 'it publishes a new page on the live site' === $r->get_error_data()['reason'] );
+t( 'live: publishing a blog post is not held', $not_held( send( array( 'body' => run_body( 'bcm/publish-post', array( 'post_id' => 504 ) ) ) ) ) );
+t( 'live: scheduling a blog post is not held', $not_held( send( array( 'body' => run_body( 'bcm/schedule-post', array( 'post_id' => 504, 'publish_at' => '2026-12-01 09:00' ) ) ) ) ) );
+t( 'live: first publish of a blog post through Elementor is not held', $not_held( send( array( 'body' => run_body( 'elementor/publish-document', array( 'post_id' => 504 ) ) ) ) ) );
+$r = send( array( 'body' => run_body( 'bcm/trash-post', array( 'post_id' => 504 ) ) ) );
+is_code( 'live: trashing a blog post is held', $r, 'bcm_hub_needs_confirmation' );
+t( 'live: trash reason', is_wp_error( $r ) && 'it moves a blog post on the live site to the trash' === $r->get_error_data()['reason'] );
+is_code( 'live: trashing a page is held', send( array( 'body' => run_body( 'bcm/trash-post', array( 'post_id' => 503 ) ) ) ), 'bcm_hub_needs_confirmation' );
+
+// Pre-launch site (Cloudways temporary address): nothing here is held; embeds still are.
+$live_home = $GLOBALS['__options']['home'];
+$pre       = 'wordpress-711989-6765152.cloudwaysapps.com';
+$GLOBALS['__options']['home'] = 'https://' . $pre;
+t( 'pre-launch: first publish of a page not held', $not_held( send( array( 'host' => $pre, 'body' => run_body( 'elementor/publish-document', array( 'post_id' => 501 ) ) ) ) ) );
+t( 'pre-launch: publishing a page not held', $not_held( send( array( 'host' => $pre, 'body' => run_body( 'bcm/publish-post', array( 'post_id' => 503 ) ) ) ) ) );
+t( 'pre-launch: publish status through page settings not held', $not_held( send( array( 'host' => $pre, 'body' => run_body( 'elementor/update-page-settings', array( 'post_id' => 501, 'settings' => array( 'post_status' => 'publish' ) ) ) ) ) ) );
+t( 'pre-launch: trashing not held', $not_held( send( array( 'host' => $pre, 'body' => run_body( 'bcm/trash-post', array( 'post_id' => 503 ) ) ) ) ) );
+is_code( 'pre-launch: HTML embeds still held', send( array( 'host' => $pre, 'body' => run_body( 'bcm/add-html-embed', $embed ) ) ), 'bcm_hub_needs_confirmation' );
+$GLOBALS['__options']['home'] = $live_home;
+
+foreach ( array( 'wordpress-711989-6765152.cloudwaysapps.com' => true, 'WWW.Phpstack-1-2.CloudwaysApps.com.' => true, 'cloudwaysapps.com' => false, 'evilcloudwaysapps.com' => false, 'x.cloudwaysapps.com.evil.ca' => false, 'kozyhomes.ca' => false, '' => false ) as $h => $want ) {
+	t( "pre-launch address check: '$h'", $want === BCM_Hub_Policy::is_prelaunch_host( $h ) );
+}
+$embed = array( 'post_id' => 502, 'html' => '<div id="calc"></div><script>document.getElementById("calc").textContent="ok";</script>', 'approved' => true );
+$r = send( array( 'body' => run_body( 'bcm/add-html-embed', $embed ) ) );
+is_code( 'HTML embed: held for Chris (script not refused by the scan)', $r, 'bcm_hub_needs_confirmation' );
+t( 'HTML embed: reason says so', is_wp_error( $r ) && 'it adds HTML or JavaScript code to a page' === $r->get_error_data()['reason'] );
+is_code( 'the embed exemption is only for add-html-embed', send( array( 'body' => run_body( 'elementor/manage-elements', array( 'operations' => array( array( 'widgetType' => 'html', 'settings' => array( 'html' => '<script>x</script>' ) ) ) ) ) ) ), 'bcm_hub_excluded' );
+
 // Reading clients' leads needs confirmation even though it only reads.
 $r = send( array( 'body' => run_body( 'elementor/list-form-submissions', array( 'post_id' => 1 ) ) ) );
 is_code( 'form submissions: needs confirmation', $r, 'bcm_hub_needs_confirmation' );
@@ -328,7 +388,7 @@ t( 'list omits other families', ! isset( $names['core/get-site-info'] ) );
 t( 'list marks confirm tier', isset( $names['bcm/update-form-email'] ) && 'confirm' === $names['bcm/update-form-email'] && 'confirm' === $names['bcm/set-homepage'] );
 t( 'list includes list-tracking-codes (read-only)', isset( $names['bcm/list-tracking-codes'] ) && 'allowed' === $names['bcm/list-tracking-codes'] );
 t( 'list is sorted', $list && array_keys( $names ) === ( function ( $a ) { sort( $a ); return $a; } )( array_keys( $names ) ) );
-$all_real = array( 'add-gallery-image','add-gallery-tab','add-list-item','add-menu-item','add-tracking-code','check-for-updates','create-post','create-term','find-images','find-text','get-activity-log','get-atomic-image-fit','get-post','get-site-identity','list-categories','list-forms','list-items','list-media','list-menus','list-posts','list-tracking-codes','publish-post','purge-page-cache','remove-gallery-image','remove-list-item','remove-menu-item','remove-tracking-code','replace-image','replace-text','schedule-post','set-atomic-image-fit','set-homepage','set-page-layout','unpublish-post','update-form-email','update-image-alt','update-menu-item','update-post','update-site-identity','upload-media' );
+$all_real = array( 'add-gallery-image','add-gallery-tab','add-html-embed','add-list-item','add-menu-item','add-redirect','add-tracking-code','check-for-updates','create-post','create-term','find-images','find-text','get-activity-log','get-atomic-image-fit','get-post','get-site-identity','list-categories','list-forms','list-items','list-media','list-menus','list-posts','list-redirects','list-tracking-codes','make-private','publish-post','purge-page-cache','remove-gallery-image','remove-list-item','remove-menu-item','remove-redirect','remove-tracking-code','replace-image','replace-text','schedule-post','set-atomic-image-fit','set-homepage','set-page-layout','trash-post','unpublish-post','update-form-email','update-image-alt','update-menu-item','update-post','update-site-identity','upload-media' );
 $unlisted = array();
 foreach ( $all_real as $n ) {
 	$tier = BCM_Hub_Policy::tier( 'bcm/' . $n, null );
@@ -336,9 +396,9 @@ foreach ( $all_real as $n ) {
 		$unlisted[] = $n;
 	}
 }
-t( 'all 40 bcm abilities have a reviewed tier', array() === $unlisted, implode( ', ', $unlisted ) );
+t( 'all 46 bcm abilities have a reviewed tier', array() === $unlisted, implode( ', ', $unlisted ) );
 $registered = array_filter( array_keys( $GLOBALS['__abilities'] ), function ( $n ) { return 0 === strpos( $n, 'bcm/' ); } );
-t( 'plugin registers exactly the 40 known bcm abilities', 40 === count( $registered ) && array() === array_diff( $registered, array_map( function ( $n ) { return 'bcm/' . $n; }, $all_real ) ) );
+t( 'plugin registers exactly the 46 known bcm abilities', 46 === count( $registered ) && array() === array_diff( $registered, array_map( function ( $n ) { return 'bcm/' . $n; }, $all_real ) ) );
 $info = data( send( array( 'body' => array( 'action' => 'info', 'ability' => 'bcm/update-post' ) ) ) );
 t( 'info returns schema and tier', $info && isset( $info['ability']['input_schema']['properties'] ) && 'allowed' === $info['ability']['tier'] );
 

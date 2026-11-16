@@ -235,7 +235,7 @@ function wp_nonce_field( $a ) { echo '<input type="hidden" name="_wpnonce" value
 function checked( $a, $b = true, $echo = true ) { return $a == $b ? ' checked="checked"' : ''; } // phpcs:ignore
 function selected( $a, $b = true, $echo = true ) { return $a == $b ? ' selected="selected"' : ''; } // phpcs:ignore
 function submit_button( $t ) { echo '<button>' . esc_html( $t ) . '</button>'; }
-function get_post( $id ) { return null; }
+function get_post( $id ) { return isset( $GLOBALS['__posts'][ (int) $id ] ) ? $GLOBALS['__posts'][ (int) $id ] : null; }
 function get_edit_post_link( $id ) { return ''; }
 
 /* Database --------------------------------------------------------------- */

@@ -39,6 +39,10 @@ jobs:
         # Classic, Atomic (V4) and background images, including Atomic images stored by id only.
         run: php tests/images/run.php
 
+      - name: Content, redirect and embed tests
+        # Publish/private/trash for posts and pages, Redirection redirects, HTML embeds.
+        run: php tests/content/run.php
+
       - name: Build release
         run: python3 scripts/build_release.py "${GITHUB_REF_NAME#v}"
 

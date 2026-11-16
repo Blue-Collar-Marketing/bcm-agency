@@ -244,14 +244,17 @@ function bcm_agency_schedule_post( array $input ) {
 
 function bcm_agency_publish_post( array $input ) {
 	if ( empty( $input['approved'] ) ) {
-		return new WP_Error( 'bcm_needs_approval', 'Publishing makes the post live immediately. Confirm with the person, then call again with approved: true.' );
+		return new WP_Error( 'bcm_needs_approval', 'Publishing makes it live immediately. Confirm with the person, then call again with approved: true.' );
 	}
-	$post = bcm_agency_get_editable_post( isset( $input['post_id'] ) ? $input['post_id'] : 0 );
+	$post = bcm_agency_get_editable_content( isset( $input['post_id'] ) ? $input['post_id'] : 0 );
 	if ( is_wp_error( $post ) ) {
 		return $post;
 	}
+	if ( ! current_user_can( 'page' === $post->post_type ? 'publish_pages' : 'publish_posts' ) ) {
+		return new WP_Error( 'bcm_forbidden', 'You are not allowed to publish this.' );
+	}
 	if ( 'publish' === $post->post_status ) {
-		return new WP_Error( 'bcm_already_live', 'This post is already published.' );
+		return new WP_Error( 'bcm_already_live', 'This is already published.' );
 	}
 	$was = $post->post_status;
 	$r   = wp_update_post(
@@ -280,14 +283,18 @@ function bcm_agency_publish_post( array $input ) {
 
 function bcm_agency_unpublish_post( array $input ) {
 	if ( empty( $input['approved'] ) ) {
-		return new WP_Error( 'bcm_needs_approval', 'Unpublishing takes the post off the site right away (its URL stops working). Confirm with the person, then call again with approved: true.' );
+		return new WP_Error( 'bcm_needs_approval', 'Unpublishing takes it off the site right away (its URL stops working). Confirm with the person, then call again with approved: true.' );
 	}
-	$post = bcm_agency_get_editable_post( isset( $input['post_id'] ) ? $input['post_id'] : 0 );
+	$post = bcm_agency_get_editable_content( isset( $input['post_id'] ) ? $input['post_id'] : 0 );
 	if ( is_wp_error( $post ) ) {
 		return $post;
 	}
+	$protected = bcm_agency_protected_page_reason( $post );
+	if ( '' !== $protected ) {
+		return new WP_Error( 'bcm_protected_page', 'This page cannot be unpublished from here because ' . $protected . '.' );
+	}
 	if ( ! in_array( $post->post_status, array( 'publish', 'future', 'private' ), true ) ) {
-		return new WP_Error( 'bcm_not_live', 'This post is already a draft (status: ' . $post->post_status . ').' );
+		return new WP_Error( 'bcm_not_live', 'This is already a draft (status: ' . $post->post_status . ').' );
 	}
 	$was = $post->post_status;
 	$url = get_permalink( $post );
@@ -494,8 +501,8 @@ function bcm_agency_register_post_abilities() {
 	bcm_agency_register(
 		'bcm/publish-post',
 		array(
-			'label'               => 'Publish blog post now',
-			'description'         => 'Publishes a draft or scheduled blog post immediately (for quick posts a PM asks for). Requires approved: true after the person confirms. To take a post back off the site, use bcm/unpublish-post.',
+			'label'               => 'Publish a post or page now',
+			'description'         => 'Publishes a draft or scheduled blog post or page immediately. Requires approved: true after the person confirms; through the BCM hub, publishing a page on a launched site (not a blog post, and not a site still on its Cloudways temporary address) also needs Chris\'s second confirmation. For a page built with Elementor that has staged edits, use elementor/publish-document instead. To take something back off the site, use bcm/unpublish-post or bcm/make-private.',
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array(
@@ -510,7 +517,7 @@ function bcm_agency_register_post_abilities() {
 			),
 			'execute_callback'    => 'bcm_agency_publish_post',
 			'permission_callback' => function () {
-				return current_user_can( 'publish_posts' );
+				return current_user_can( 'publish_posts' ) || current_user_can( 'publish_pages' );
 			},
 		)
 	);
@@ -518,8 +525,8 @@ function bcm_agency_register_post_abilities() {
 	bcm_agency_register(
 		'bcm/unpublish-post',
 		array(
-			'label'               => 'Unpublish blog post (back to draft)',
-			'description'         => 'Moves a published or scheduled blog post back to draft, e.g. after a test post has been checked in the live template. Nothing is deleted; it can be published again. Requires approved: true after the person confirms. Clears page caches.',
+			'label'               => 'Unpublish a post or page (back to draft)',
+			'description'         => 'Moves a published, scheduled or private blog post or page back to draft. Nothing is deleted; it can be published again. The homepage, blog page and privacy policy page are refused. Requires approved: true after the person confirms. Clears page caches.',
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array(
@@ -534,7 +541,7 @@ function bcm_agency_register_post_abilities() {
 			),
 			'execute_callback'    => 'bcm_agency_unpublish_post',
 			'permission_callback' => function () {
-				return current_user_can( 'publish_posts' );
+				return current_user_can( 'publish_posts' ) || current_user_can( 'publish_pages' );
 			},
 		)
 	);

@@ -46,6 +46,8 @@ final class BCM_Hub_Policy {
 		'bcm/add-tracking-code',
 		// Clients' leads: personal data.
 		'elementor/list-form-submissions',
+		// HTML or JavaScript placed on a page (Elementor HTML widget); Chris sees the exact code.
+		'bcm/add-html-embed',
 		// Site-wide settings.
 		'bcm/set-homepage',
 		'bcm/update-site-identity',
@@ -62,10 +64,20 @@ final class BCM_Hub_Policy {
 	);
 
 	/**
+	 * Pre-launch sites still live on their Cloudways temporary address
+	 * (*.cloudwaysapps.com): nobody can find them, so publishing and trashing
+	 * there need no second confirmation. Any other address is a launched site.
+	 */
+	public static function is_prelaunch_host( $host ) {
+		$host = strtolower( trim( (string) $host, ". \t\n\r" ) );
+		return '' !== $host && (bool) preg_match( '/(^|\.)[a-z0-9-]+\.cloudwaysapps\.com$/', $host );
+	}
+
+	/**
 	 * Skipped by the content scan. bcm/add-tracking-code accepts a pasted provider
 	 * snippet only to read the ID out of it, then writes the official code itself.
 	 */
-	const SCAN_EXEMPT_ABILITIES = array( 'bcm/add-tracking-code' );
+	const SCAN_EXEMPT_ABILITIES = array( 'bcm/add-tracking-code', 'bcm/add-html-embed' );
 
 	/**
 	 * Reviewed and allowed. Write abilities here still have their input scanned.
@@ -77,6 +89,7 @@ final class BCM_Hub_Policy {
 		'bcm/add-gallery-image',
 		'bcm/add-gallery-tab',
 		'bcm/add-list-item',
+		'bcm/add-redirect',
 		'bcm/add-menu-item',
 		'bcm/check-for-updates',
 		'bcm/create-post',
@@ -93,17 +106,23 @@ final class BCM_Hub_Policy {
 		'bcm/list-media',
 		'bcm/list-menus',
 		'bcm/list-posts',
+		'bcm/list-redirects',
 		'bcm/list-tracking-codes',
+		'bcm/make-private',
+		// Going live and trashing: allowed, but a page going live or anything trashed
+		// on a launched site needs Chris (BCM_Hub decides; see is_prelaunch_host).
 		'bcm/publish-post',
 		'bcm/purge-page-cache',
 		'bcm/remove-gallery-image',
 		'bcm/remove-list-item',
 		'bcm/remove-menu-item',
+		'bcm/remove-redirect',
 		'bcm/remove-tracking-code',
 		'bcm/replace-image',
 		'bcm/replace-text',
 		'bcm/schedule-post',
 		'bcm/set-page-layout',
+		'bcm/trash-post',
 		'bcm/unpublish-post',
 		'bcm/update-image-alt',
 		'bcm/update-menu-item',
@@ -133,6 +152,9 @@ final class BCM_Hub_Policy {
 		'elementor/build-composition',
 		'elementor/clear-cache',
 		'elementor/create-page',
+		// One-time switch that turns Elementor's own tools on; Elementor itself
+		// requires consent: true from the person.
+		'elementor/enable-elementor-abilities',
 		'elementor/manage-component',
 		'elementor/manage-elements',
 		'elementor/manage-classes',
