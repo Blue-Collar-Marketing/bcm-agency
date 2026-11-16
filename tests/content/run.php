@@ -28,6 +28,7 @@ $GLOBALS['meta']    = array();
 $GLOBALS['options'] = array( 'page_on_front' => 10, 'page_for_posts' => 11, 'wp_page_for_privacy_policy' => 12 );
 $GLOBALS['caps']    = array( 'edit_post' => true, 'delete_post' => true, 'publish_posts' => true, 'publish_pages' => true, 'unfiltered_html' => true, 'edit_pages' => true, 'edit_others_posts' => true );
 $GLOBALS['hub_confirmed'] = false;
+$GLOBALS['hub_running']   = false;
 function add_post( $id, $type, $status, $title, $slug ) { $GLOBALS['posts'][ $id ] = new WP_Post( array( 'ID' => $id, 'post_type' => $type, 'post_status' => $status, 'post_title' => $title, 'post_name' => $slug ) ); }
 function get_post( $id ) { return isset( $GLOBALS['posts'][ (int) $id ] ) ? $GLOBALS['posts'][ (int) $id ] : null; }
 function get_post_status( $id ) { $p = get_post( $id ); return $p ? $p->post_status : false; }
@@ -61,7 +62,7 @@ function wp_trash_post( $id ) { $p = get_post( $id ); $p->post_status = 'trash';
 function current_time( $t, $gmt = false ) { return '2026-11-15 10:00:00'; }
 function bcm_agency_purge_page_cache() { return array( 'test' ); }
 function add_action() {}
-class BCM_Hub { public static function running_confirmed() { return $GLOBALS['hub_confirmed']; } }
+class BCM_Hub { public static function running() { return $GLOBALS['hub_running']; } public static function running_confirmed() { return $GLOBALS['hub_running'] && $GLOBALS['hub_confirmed']; } }
 
 // Redirection's tables, on SQLite.
 class Fake_WPDB {
@@ -184,6 +185,12 @@ $GLOBALS['caps']['publish_pages'] = false;
 t( 'publish page: needs publish_pages', 'bcm_forbidden' === code( bcm_agency_publish_post( array( 'post_id' => 22, 'approved' => true ) ) ) && 'draft' === get_post( 22 )->post_status );
 $GLOBALS['caps']['publish_pages'] = true;
 t( 'publish: works for a page', 'ok' === code( bcm_agency_publish_post( array( 'post_id' => 22, 'approved' => true ) ) ) && 'publish' === get_post( 22 )->post_status );
+add_post( 23, 'page', 'draft', 'Elementor Page', 'elementor-page' );
+$GLOBALS['meta'][23]['_elementor_edit_mode'] = 'builder';
+$r = bcm_agency_publish_post( array( 'post_id' => 23, 'approved' => true ) );
+t( 'publish: no false "Content is empty" for Elementor pages', 'ok' === code( $r ) && ! in_array( 'Content is empty.', $r['warnings'], true ), json_encode( is_array( $r ) ? $r['warnings'] : $r ) );
+$r = bcm_agency_unpublish_post( array( 'post_id' => 23, 'approved' => true ) );
+t( 'unpublish: clear wording', 'ok' === code( $r ) && 0 === strpos( $r['note'], 'It is a draft again' ) );
 t( 'unpublish: homepage refused', 'bcm_protected_page' === code( bcm_agency_unpublish_post( array( 'post_id' => 10, 'approved' => true ) ) ) && 'publish' === get_post( 10 )->post_status );
 t( 'unpublish: works for a page', 'ok' === code( bcm_agency_unpublish_post( array( 'post_id' => 22, 'approved' => true ) ) ) && 'draft' === get_post( 22 )->post_status );
 
@@ -223,10 +230,13 @@ $code  = '<div id="yardage"><input id="l"><input id="w"><output id="o"></output>
 $reset();
 $GLOBALS['caps']['unfiltered_html'] = false;
 t( 'embed: refused without unfiltered_html outside the hub', 'bcm_forbidden' === code( bcm_agency_add_html_embed( array( 'post_id' => 50, 'html' => $code, 'approved' => true ) ) ) );
+$GLOBALS['hub_running'] = true;
 $GLOBALS['hub_confirmed'] = true;
 t( 'embed: allowed through the hub with Chris\'s confirmation', 'ok' === code( bcm_agency_add_html_embed( array( 'post_id' => 50, 'html' => $code, 'approved' => true ) ) ) );
+$GLOBALS['caps']['unfiltered_html'] = true; // The hub's user keeps unfiltered_html since 1.4.4...
 $GLOBALS['hub_confirmed'] = false;
-$GLOBALS['caps']['unfiltered_html'] = true;
+t( 'embed: through the hub WITHOUT Chris\'s confirmation refused, even with unfiltered_html', 'bcm_forbidden' === code( bcm_agency_add_html_embed( array( 'post_id' => 50, 'html' => $code, 'approved' => true ) ) ) );
+$GLOBALS['hub_running'] = false;
 
 $reset();
 t( 'embed: needs approval, nothing saved', 'bcm_needs_approval' === code( bcm_agency_add_html_embed( array( 'post_id' => 50, 'html' => $code, 'after_id' => 'hero01' ) ) ) && $data() === $tree );
