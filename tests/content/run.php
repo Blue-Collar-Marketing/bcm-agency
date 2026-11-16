@@ -197,6 +197,33 @@ $r = bcm_agency_add_redirect( array( 'source' => '/no-tables/', 'target' => '/co
 t( 'no Redirection tables at all: clear setup message, nothing created', is_wp_error( $r ) && false !== strpos( $r->message, 'Tools → Redirection once' ), is_wp_error( $r ) ? $r->message : 'ok' );
 $GLOBALS['wpdb']->db->exec( 'ALTER TABLE wp_redirection_groups_off RENAME TO wp_redirection_groups' );
 
+// Redirection activated from Cloudways: no tables until its setup runs (1.4.6).
+$GLOBALS['red_needs_install'] = true;
+$GLOBALS['red_installs']      = 0;
+eval( 'namespace Redirection\Database; class Status { public function needs_installing(): bool { return $GLOBALS["red_needs_install"]; } }' );
+eval( 'namespace Redirection\Database\Schema; class Latest { public function install() {
+	$GLOBALS["red_installs"]++;
+	$w = $GLOBALS["wpdb"]->db;
+	$w->exec( "CREATE TABLE IF NOT EXISTS wp_redirection_groups (id INTEGER PRIMARY KEY, name TEXT, module_id INTEGER, status TEXT, position INTEGER)" );
+	$w->exec( "CREATE TABLE IF NOT EXISTS wp_redirection_items (id INTEGER PRIMARY KEY AUTOINCREMENT, url TEXT, regex INTEGER, group_id INTEGER, status TEXT, action_type TEXT, action_code INTEGER, action_data TEXT, match_type TEXT, title TEXT, last_count INTEGER DEFAULT 0, last_access TEXT)" );
+	$w->exec( "INSERT INTO wp_redirection_groups (name, module_id, status, position) VALUES (\'Redirections\', 1, \'enabled\', 0), (\'Modified Posts\', 1, \'enabled\', 1)" );
+	$GLOBALS["red_needs_install"] = false;
+	return true;
+} }' );
+$GLOBALS['wpdb']->db->exec( 'ALTER TABLE wp_redirection_groups RENAME TO saved_groups' );
+$GLOBALS['wpdb']->db->exec( 'ALTER TABLE wp_redirection_items RENAME TO saved_items' );
+$l = bcm_agency_list_redirects( array() );
+t( 'never set up: listing says so, and does not install', 0 === $l['count'] && false !== strpos( $l['note'], 'setup was never finished' ) && 0 === $GLOBALS['red_installs'] );
+$r = bcm_agency_add_redirect( array( 'source' => '/fresh-site/', 'target' => '/concrete-services/', 'approved' => true ) );
+t( 'never set up: adding a redirect runs Redirection\'s installer once, then works', 'ok' === code( $r ) && 1 === $GLOBALS['red_installs'] && '/fresh-site/' === $GLOBALS['wpdb']->get_var( "SELECT url FROM wp_redirection_items WHERE id = " . (int) $r['id'] ), json_encode( $r ) );
+t( 'second redirect: no reinstall', 'ok' === code( bcm_agency_add_redirect( array( 'source' => '/fresh-site-2/', 'target' => '/concrete-services/', 'approved' => true ) ) ) && 1 === $GLOBALS['red_installs'] );
+$GLOBALS['wpdb']->db->exec( 'DROP TABLE wp_redirection_groups' );
+$GLOBALS['wpdb']->db->exec( 'DROP TABLE wp_redirection_items' );
+$r = bcm_agency_add_redirect( array( 'source' => '/odd-state/', 'target' => '/concrete-services/', 'approved' => true ) );
+t( 'Redirection says installed but no tables: clear error, no guessing', 'bcm_no_redirection' === code( $r ) && 1 === $GLOBALS['red_installs'] );
+$GLOBALS['wpdb']->db->exec( 'ALTER TABLE saved_groups RENAME TO wp_redirection_groups' );
+$GLOBALS['wpdb']->db->exec( 'ALTER TABLE saved_items RENAME TO wp_redirection_items' );
+
 // --- make private -------------------------------------------------------------------
 t( 'private: homepage refused', 'bcm_protected_page' === code( bcm_agency_make_private( array( 'post_id' => 10, 'approved' => true ) ) ) );
 t( 'private: blog page refused', 'bcm_protected_page' === code( bcm_agency_make_private( array( 'post_id' => 11, 'approved' => true ) ) ) );
