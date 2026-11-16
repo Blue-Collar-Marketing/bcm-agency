@@ -362,6 +362,8 @@ $r = send( array( 'body' => run_body( 'bcm/trash-post', array( 'post_id' => 504 
 is_code( 'live: trashing a blog post is held', $r, 'bcm_hub_needs_confirmation' );
 t( 'live: trash reason', is_wp_error( $r ) && 'it moves a blog post on the live site to the trash' === $r->get_error_data()['reason'] );
 is_code( 'live: trashing a page is held', send( array( 'body' => run_body( 'bcm/trash-post', array( 'post_id' => 503 ) ) ) ), 'bcm_hub_needs_confirmation' );
+$r = send( array( 'body' => run_body( 'bcm/trash-post', array( 'post_id' => 503, 'redirect_to' => '/services/' ) ) ) );
+t( 'live: trash with a redirect gives the trash reason, not "form destination"', is_wp_error( $r ) && 'it moves a page on the live site to the trash' === $r->get_error_data()['reason'], is_wp_error( $r ) ? $r->get_error_data()['reason'] : 'ok' );
 
 // Pre-launch site (Cloudways temporary address): nothing here is held; embeds still are.
 $live_home = $GLOBALS['__options']['home'];
@@ -371,6 +373,7 @@ t( 'pre-launch: first publish of a page not held', $not_held( send( array( 'host
 t( 'pre-launch: publishing a page not held', $not_held( send( array( 'host' => $pre, 'body' => run_body( 'bcm/publish-post', array( 'post_id' => 503 ) ) ) ) ) );
 t( 'pre-launch: publish status through page settings not held', $not_held( send( array( 'host' => $pre, 'body' => run_body( 'elementor/update-page-settings', array( 'post_id' => 501, 'settings' => array( 'post_status' => 'publish' ) ) ) ) ) ) );
 t( 'pre-launch: trashing not held', $not_held( send( array( 'host' => $pre, 'body' => run_body( 'bcm/trash-post', array( 'post_id' => 503 ) ) ) ) ) );
+t( 'pre-launch: trashing with a redirect not held either', $not_held( send( array( 'host' => $pre, 'body' => run_body( 'bcm/trash-post', array( 'post_id' => 503, 'redirect_to' => '/services/' ) ) ) ) ) );
 is_code( 'pre-launch: HTML embeds still held', send( array( 'host' => $pre, 'body' => run_body( 'bcm/add-html-embed', $embed ) ) ), 'bcm_hub_needs_confirmation' );
 $GLOBALS['__options']['home'] = $live_home;
 
