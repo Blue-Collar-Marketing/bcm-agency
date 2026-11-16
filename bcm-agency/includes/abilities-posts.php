@@ -88,8 +88,8 @@ function bcm_agency_readiness_warnings( WP_Post $post ) {
 	if ( '' === trim( $post->post_excerpt ) ) {
 		$w[] = 'No excerpt.';
 	}
-	if ( '' === trim( wp_strip_all_tags( $post->post_content ) ) ) {
-		$w[] = 'Content is empty.';
+	if ( '' === trim( wp_strip_all_tags( $post->post_content ) ) && ! bcm_agency_is_elementor_post( $post->ID ) ) {
+		$w[] = 'Content is empty.'; // Elementor keeps its content in its own data, not post_content.
 	}
 	return $w;
 }
@@ -314,7 +314,7 @@ function bcm_agency_unpublish_post( array $input ) {
 	$out['was']        = $was;
 	$out['former_url'] = $url;
 	$out['cleared']    = $cleared;
-	$out['note']       = 'The post is a draft again and nothing was deleted. Publish or schedule it again any time. If it was live long enough for Google to see it, its old URL will show as "not found" until it is republished.';
+	$out['note']       = 'It is a draft again and nothing was deleted. Publish it again any time. If it was live long enough for Google to see it, its old address shows "not found" until it is republished, or until a redirect is added with bcm/add-redirect.';
 	$out['_log']       = array(
 		'action' => 'unpublished to draft',
 		'was'    => $was,

@@ -4,8 +4,9 @@
  * embed, a calculator or similar code.
  *
  * Through the BCM hub this always needs Chris's second confirmation, which
- * shows him the exact code. Outside the hub it needs a real administrator
- * with WordPress's unfiltered_html capability, the same rule Elementor applies.
+ * shows him the exact code (checked here as well as by the hub gate). Outside
+ * the hub it needs an administrator with WordPress's unfiltered_html
+ * capability, the same rule Elementor applies.
  * The code is written straight to the page's Elementor data so it is stored
  * exactly as approved.
  *
@@ -58,8 +59,8 @@ function bcm_agency_new_element_id( array $data ) {
 }
 
 function bcm_agency_embed_allowed() {
-	if ( class_exists( 'BCM_Hub' ) && BCM_Hub::running_confirmed() ) {
-		return true; // Chris approved this exact code.
+	if ( class_exists( 'BCM_Hub' ) && BCM_Hub::running() ) {
+		return BCM_Hub::running_confirmed(); // Through the hub: only with Chris's approval of this exact code.
 	}
 	return current_user_can( 'unfiltered_html' );
 }

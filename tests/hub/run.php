@@ -55,8 +55,16 @@ do_action( 'wp_abilities_api_init' );
 do_action( 'rest_api_init' );
 
 /* Fake abilities that report what they ran as -------------------------- */
+// Elementor's own rule on every document save (core/base/document.php):
+// without unfiltered_html, the WHOLE page goes through wp_kses_post, which
+// strips iframes and scripts anywhere on it (a Google Map embed, a form).
+$GLOBALS['__page_with_map'] = '<p>Visit our yard</p><iframe src="https://www.google.com/maps/embed?pb=!1m18" width="600" height="450"></iframe>';
+function elementor_like_save( $html ) {
+	return current_user_can( 'unfiltered_html' ) ? $html : preg_replace( '#<(iframe|script)\b[^>]*>.*?</\1>#is', '', $html );
+}
 $probe = function () {
 	return array(
+		'saved_page'      => elementor_like_save( $GLOBALS['__page_with_map'] ),
 		'user'            => get_current_user_id(),
 		'kses_on'         => $GLOBALS['__kses_on'],
 		'unfiltered_html' => current_user_can( 'unfiltered_html' ),
@@ -407,10 +415,14 @@ $r = send( array( 'body' => run_body( 'bcm/get-post', array( 'post_id' => 5 ) ) 
 is_code( 'read-only bcm ability runs', $r, 'ok' );
 $p = data( $r )['result'];
 t( 'runs as the oldest administrator', 1 === $p['user'] );
-t( 'unfiltered_html removed, kses on', false === $p['unfiltered_html'] && true === $p['kses_on'] );
+t( 'unfiltered_html kept (1.4.4), so Elementor does not re-filter whole pages', true === $p['unfiltered_html'] && false === $p['kses_on'] );
 t( 'plugin/user management removed', false === $p['install_plugins'] && false === $p['create_users'] && false === $p['list_users'] );
 t( 'manage_options and update_plugins kept', true === $p['manage_options'] && true === $p['update_plugins'] );
 t( 'user signed out afterwards', 0 === get_current_user_id() );
+// An ordinary edit through the hub keeps an existing Google Map embed on the page.
+$r = send( array( 'body' => run_body( 'elementor/manage-elements', array( 'post_id' => 7, 'operations' => array( array( 'action' => 'update', 'element_id' => 'h1', 'settings' => array( 'title' => 'New heading' ) ) ) ) ) ) );
+is_code( 'ordinary Elementor edit runs', $r, 'ok' );
+t( 'existing map iframe on the page survives an edit made through the hub', $GLOBALS['__page_with_map'] === data( $r )['result']['probe']['saved_page'], (string) data( $r )['result']['probe']['saved_page'] );
 wp_set_current_user( 1 );
 t( 'admin keeps unfiltered_html outside hub requests', current_user_can( 'unfiltered_html' ) && current_user_can( 'install_plugins' ) && false === $GLOBALS['__kses_on'] );
 wp_set_current_user( 0 );
