@@ -80,8 +80,15 @@ class Fake_WPDB {
 		$i    = 0;
 		return preg_replace_callback( '/%[sd]/', function ( $m ) use ( &$i, $args ) { $v = $args[ $i++ ]; return '%d' === $m[0] ? (string) (int) $v : $this->db->quote( (string) $v ); }, $q );
 	}
-	public function get_var( $sql ) { $r = $this->db->query( $sql )->fetch( PDO::FETCH_NUM ); return $r ? $r[0] : null; }
-	public function get_results( $sql, $o = null ) { return $this->db->query( $sql )->fetchAll( PDO::FETCH_ASSOC ); }
+	public function get_var( $sql ) {
+		if ( preg_match( "/^SHOW TABLES LIKE '([^']+)'$/", trim( $sql ), $m ) ) {
+			$r = $this->db->query( "SELECT name FROM sqlite_master WHERE type = 'table' AND name = " . $this->db->quote( $m[1] ) )->fetch( PDO::FETCH_NUM );
+			return $r ? $r[0] : null;
+		}
+		try { $r = $this->db->query( $sql )->fetch( PDO::FETCH_NUM ); } catch ( PDOException $e ) { return null; } // Like wpdb: a missing table returns nothing.
+		return $r ? $r[0] : null;
+	}
+	public function get_results( $sql, $o = null ) { try { return $this->db->query( $sql )->fetchAll( PDO::FETCH_ASSOC ); } catch ( PDOException $e ) { return array(); } }
 }
 $GLOBALS['wpdb'] = new Fake_WPDB();
 
@@ -112,7 +119,16 @@ t( 'no Redirection: trash with redirect stops before trashing', 'bcm_no_redirect
 
 // Redirection's API, as the plugin defines it (create runs its sanitizer and inserts a row).
 eval( '
-class Red_Group {}
+class Red_Group {
+	private $id;
+	public function __construct( $id ) { $this->id = $id; }
+	public static function create( $name, $module_id, $enabled = true ) {
+		$w = $GLOBALS["wpdb"]->db;
+		$w->exec( "INSERT INTO wp_redirection_groups (name, module_id, status, position) VALUES (" . $w->quote( $name ) . ", " . (int) $module_id . ", \'enabled\', 0)" );
+		return new Red_Group( (int) $w->lastInsertId() );
+	}
+	public function get_id() { return $this->id; }
+}
 class Red_Item {
 	private $row;
 	public function __construct( $row ) { $this->row = $row; }
@@ -168,6 +184,18 @@ $apache = (int) $GLOBALS['wpdb']->get_var( "SELECT id FROM wp_redirection_items 
 t( 'remove refuses other modules', 'bcm_not_found' === code( bcm_agency_remove_redirect( array( 'id' => $apache, 'approved' => true ) ) ) );
 t( 'remove works', 'ok' === code( bcm_agency_remove_redirect( array( 'id' => $id, 'approved' => true ) ) ) && 1 === count( redirects() ) );
 t( 'remove unknown id', 'bcm_not_found' === code( bcm_agency_remove_redirect( array( 'id' => 999, 'approved' => true ) ) ) );
+
+// --- Redirection installed but its setup screen never opened (1.4.5) ---------------------
+$GLOBALS['wpdb']->db->exec( "UPDATE wp_redirection_groups SET status = 'disabled' WHERE module_id = 1" );
+$r = bcm_agency_add_redirect( array( 'source' => '/never-set-up/', 'target' => '/concrete-services/', 'approved' => true ) );
+$grp = $GLOBALS['wpdb']->db->query( "SELECT id, name, module_id, status FROM wp_redirection_groups WHERE status = 'enabled' AND module_id = 1" )->fetchAll( PDO::FETCH_ASSOC );
+t( 'missing group: created like Redirection\'s own setup, redirect added to it', 'ok' === code( $r ) && 1 === count( $grp ) && 'Redirections' === $grp[0]['name'] && (int) $grp[0]['id'] === (int) $GLOBALS['wpdb']->get_var( "SELECT group_id FROM wp_redirection_items WHERE url = '/never-set-up/'" ), json_encode( array( $r, $grp ) ) );
+$GLOBALS['wpdb']->db->exec( 'ALTER TABLE wp_redirection_groups RENAME TO wp_redirection_groups_off' );
+$GLOBALS['wpdb']->db->exec( 'CREATE TABLE wp_redirection_groups (id INTEGER PRIMARY KEY, name TEXT, module_id INTEGER, status TEXT, position INTEGER)' );
+$GLOBALS['wpdb']->db->exec( 'DROP TABLE wp_redirection_groups' );
+$r = bcm_agency_add_redirect( array( 'source' => '/no-tables/', 'target' => '/concrete-services/', 'approved' => true ) );
+t( 'no Redirection tables at all: clear setup message, nothing created', is_wp_error( $r ) && false !== strpos( $r->message, 'Tools → Redirection once' ), is_wp_error( $r ) ? $r->message : 'ok' );
+$GLOBALS['wpdb']->db->exec( 'ALTER TABLE wp_redirection_groups_off RENAME TO wp_redirection_groups' );
 
 // --- make private -------------------------------------------------------------------
 t( 'private: homepage refused', 'bcm_protected_page' === code( bcm_agency_make_private( array( 'post_id' => 10, 'approved' => true ) ) ) );
@@ -263,6 +291,30 @@ $d = $data();
 t( 'embed update: code replaced in place', 'ok' === code( $r ) && $code === $d[0]['elements'][1]['settings']['html'] && $d[0]['elements'][0] === $tree[0]['elements'][0] && 3 === count( $d ) );
 t( 'embed update: same code is no change', 'bcm_no_change' === code( bcm_agency_add_html_embed( array( 'post_id' => 50, 'html' => $code, 'mode' => 'update', 'element_id' => 'html01', 'approved' => true ) ) ) );
 t( 'embed update: only HTML widgets', 'bcm_bad_input' === code( bcm_agency_add_html_embed( array( 'post_id' => 50, 'html' => $code, 'mode' => 'update', 'element_id' => 'head01', 'approved' => true ) ) ) );
+
+// Section options for the embed's own new section (1.4.5).
+$reset();
+$r = bcm_agency_add_html_embed( array( 'post_id' => 50, 'html' => $code, 'after_id' => 'hero01', 'section_background' => '#f5f3ef', 'section_padding' => 96, 'approved' => true ) );
+$sec = $data()[1]['settings'];
+t( 'section: background, full width (default with a background) and padding as Elementor settings', 'ok' === code( $r ) && 'classic' === $sec['background_background'] && '#F5F3EF' === $sec['background_color'] && 'selector{box-shadow:0 0 0 100vmax #F5F3EF;clip-path:inset(0 -100vmax)}' === $sec['custom_css'] && '96' === $sec['padding']['top'] && '96' === $sec['padding']['bottom'] && '0' === $sec['padding']['left'], json_encode( $sec ) );
+$reset();
+bcm_agency_add_html_embed( array( 'post_id' => 50, 'html' => $code, 'section_background' => '#FFFFFF', 'section_full_width' => false, 'approved' => true ) );
+$sec = $data()[3]['settings'];
+t( 'section: full width can be turned off', '#FFFFFF' === $sec['background_color'] && ! isset( $sec['custom_css'] ) );
+$reset();
+bcm_agency_add_html_embed( array( 'post_id' => 50, 'html' => $code, 'approved' => true ) );
+t( 'section: no options, plain section as before', array( 'content_width' => 'boxed' ) === $data()[3]['settings'] );
+$reset();
+foreach ( array(
+	array( array( 'section_background' => 'red' ), 'bad colour' ),
+	array( array( 'section_background' => '#fff;}body{display:none' ), 'CSS injection in the colour' ),
+	array( array( 'section_full_width' => true ), 'full width without a background' ),
+	array( array( 'section_padding' => 999 ), 'padding out of range' ),
+	array( array( 'section_background' => '#FFFFFF', 'parent_id' => 'hero01' ), 'options inside an existing section' ),
+	array( array( 'section_background' => '#FFFFFF', 'mode' => 'update', 'element_id' => 'html01' ), 'options on update' ),
+) as $c ) {
+	t( 'section refused: ' . $c[1], 'bcm_bad_input' === code( bcm_agency_add_html_embed( array_merge( array( 'post_id' => 50, 'html' => $code, 'approved' => true ), $c[0] ) ) ) && $data() === $tree );
+}
 
 $reset();
 t( 'embed: PHP refused', 'bcm_bad_input' === code( bcm_agency_add_html_embed( array( 'post_id' => 50, 'html' => '<?php echo 1; ?>', 'approved' => true ) ) ) );
