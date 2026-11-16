@@ -36,9 +36,18 @@ final class BCM_Hub {
 	const OPT_USER    = 'bcm_agency_hub_user_id';
 	const OPT_LAST    = 'bcm_agency_hub_last_contact';
 
-	/** Capabilities the hub's administrator does NOT have during a hub request. */
+	/**
+	 * Capabilities the hub's administrator does NOT have during a hub request.
+	 *
+	 * unfiltered_html is kept (1.4.4): without it Elementor runs wp_kses_post over
+	 * the WHOLE page on every save, silently stripping existing maps, iframes, form
+	 * embeds and scripts elsewhere on the page. New content is guarded instead by
+	 * the content scan (scripts, iframes, embeds, event handlers, script URLs, code
+	 * widgets and custom CSS are refused) and, for the two exempt abilities (tracking
+	 * codes, HTML embeds), by Chris's second confirmation.
+	 */
 	const REMOVED_CAPS = array(
-		'unfiltered_html', 'unfiltered_upload',
+		'unfiltered_upload',
 		'edit_plugins', 'edit_themes', 'edit_files',
 		'install_plugins', 'install_themes', 'activate_plugins', 'delete_plugins', 'delete_themes',
 		'update_core', 'update_themes', 'resume_plugins', 'resume_themes',
@@ -596,7 +605,8 @@ final class BCM_Hub {
 	/**
 	 * Act as the hub's administrator for this request only, with the
 	 * capabilities in REMOVED_CAPS taken away. The filter is added before the
-	 * user is switched so WordPress's content filters (kses) switch on.
+	 * user is switched so WordPress sets up its content filters for the reduced
+	 * capabilities.
 	 */
 	private static function begin( array $ctx ) {
 		self::$running = $ctx;
@@ -623,6 +633,10 @@ final class BCM_Hub {
 	 * True while an ability runs for the hub after Chris's second confirmation
 	 * (approval signature) was verified for this exact request.
 	 */
+	public static function running() {
+		return is_array( self::$running );
+	}
+
 	public static function running_confirmed() {
 		return is_array( self::$running ) && ! empty( self::$running['confirmed'] );
 	}
