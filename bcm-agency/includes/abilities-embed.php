@@ -58,6 +58,58 @@ function bcm_agency_new_element_id( array $data ) {
 	return $id;
 }
 
+/**
+ * Options for the embed's own new section: a background colour (Elementor's
+ * own background setting), stretched edge to edge (Elementor Pro's Custom CSS
+ * on that section, visible and editable in the editor), and vertical padding.
+ */
+function bcm_agency_embed_section_options( array $input ) {
+	$bg   = isset( $input['section_background'] ) ? trim( (string) $input['section_background'] ) : '';
+	$full = array_key_exists( 'section_full_width', $input ) ? (bool) $input['section_full_width'] : '' !== $bg;
+	$pad  = isset( $input['section_padding'] ) ? $input['section_padding'] : null;
+	if ( '' !== $bg && ! preg_match( '/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i', $bg ) ) {
+		return new WP_Error( 'bcm_bad_input', 'section_background must be a hex colour such as #F5F3EF (take it from the site\'s global colours).' );
+	}
+	if ( null !== $pad && ( ! is_numeric( $pad ) || (int) $pad < 0 || (int) $pad > 400 ) ) {
+		return new WP_Error( 'bcm_bad_input', 'section_padding is the space above and below the section in pixels, 0 to 400.' );
+	}
+	if ( $full && '' === $bg ) {
+		return new WP_Error( 'bcm_bad_input', 'section_full_width stretches the section background edge to edge, so it needs section_background.' );
+	}
+	return array(
+		'set'  => '' !== $bg || null !== $pad || array_key_exists( 'section_full_width', $input ),
+		'bg'   => strtoupper( $bg ),
+		'full' => $full,
+		'pad'  => null === $pad ? null : (int) $pad,
+	);
+}
+
+/** Elementor settings for the embed's own new section. */
+function bcm_agency_embed_section_settings( array $o ) {
+	$settings = array( 'content_width' => 'boxed' );
+	if ( '' !== $o['bg'] ) {
+		$settings['background_background'] = 'classic';
+		$settings['background_color']      = $o['bg'];
+		if ( $o['full'] ) {
+			// Themes often keep added sections inside their content width; this paints the
+			// background out to both screen edges without widening the layout or adding a
+			// sideways scrollbar. Elementor Pro shows it under Advanced → Custom CSS.
+			$settings['custom_css'] = 'selector{box-shadow:0 0 0 100vmax ' . $o['bg'] . ';clip-path:inset(0 -100vmax)}';
+		}
+	}
+	if ( null !== $o['pad'] ) {
+		$settings['padding'] = array(
+			'unit'     => 'px',
+			'top'      => (string) $o['pad'],
+			'right'    => '0',
+			'bottom'   => (string) $o['pad'],
+			'left'     => '0',
+			'isLinked' => false,
+		);
+	}
+	return $settings;
+}
+
 function bcm_agency_embed_allowed() {
 	if ( class_exists( 'BCM_Hub' ) && BCM_Hub::running() ) {
 		return BCM_Hub::running_confirmed(); // Through the hub: only with Chris's approval of this exact code.
@@ -95,6 +147,14 @@ function bcm_agency_add_html_embed( array $input ) {
 	$data = json_decode( (string) get_post_meta( $post_id, '_elementor_data', true ), true );
 	$data = is_array( $data ) ? $data : array();
 	$label = isset( $input['label'] ) ? trim( sanitize_text_field( $input['label'] ) ) : '';
+
+	$section_opts = bcm_agency_embed_section_options( $input );
+	if ( is_wp_error( $section_opts ) ) {
+		return $section_opts;
+	}
+	if ( $section_opts['set'] && ( 'add' !== $mode || ! empty( $input['parent_id'] ) ) ) {
+		return new WP_Error( 'bcm_bad_input', 'section_background, section_full_width and section_padding only apply when the embed gets its own new section (mode add without parent_id). To restyle an existing section, edit it in Elementor.' );
+	}
 
 	if ( 'update' === $mode ) {
 		$id   = isset( $input['element_id'] ) ? (string) $input['element_id'] : '';
@@ -177,7 +237,7 @@ function bcm_agency_add_html_embed( array $input ) {
 				'id'       => bcm_agency_new_element_id( array_merge( $data, array( $widget ) ) ),
 				'elType'   => 'container',
 				'isInner'  => false,
-				'settings' => array( 'content_width' => 'boxed' ),
+				'settings' => bcm_agency_embed_section_settings( $section_opts ),
 				'elements' => array( $widget ),
 			);
 			$data = array_values( $data );
@@ -230,7 +290,7 @@ function bcm_agency_register_embed_abilities() {
 		'bcm/add-html-embed',
 		array(
 			'label'               => 'Add or update an HTML embed (Elementor HTML widget)',
-			'description'         => 'Places a form embed, calculator or similar HTML/CSS/JavaScript on an Elementor page in an Elementor HTML widget, or replaces the code in an existing HTML widget (mode update with element_id). mode add: parent_id = a classic container or column to place it in (after_id = a child to place it after), or leave parent_id out to add it in its own new section after the top-level section after_id (or at the end). Up to 100 KB; no PHP. Through the BCM hub this always needs Chris\'s second confirmation showing the exact code; show the person the code first and pass approved: true.',
+			'description'         => 'Places a form embed, calculator or similar HTML/CSS/JavaScript on an Elementor page in an Elementor HTML widget, or replaces the code in an existing HTML widget (mode update with element_id). mode add: parent_id = a classic container or column to place it in (after_id = a child to place it after), or leave parent_id out to add it in its own new section after the top-level section after_id (or at the end); for its own section, match the page with section_background (hex from the site\'s global colours), section_full_width and section_padding. Up to 100 KB; no PHP. Through the BCM hub this always needs Chris\'s second confirmation showing the exact code; show the person the code first and pass approved: true.',
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array(
@@ -244,6 +304,18 @@ function bcm_agency_register_embed_abilities() {
 					'after_id'   => array( 'type' => 'string' ),
 					'element_id' => array( 'type' => 'string' ),
 					'label'      => array( 'type' => 'string' ),
+					'section_background' => array(
+						'type'        => 'string',
+						'description' => 'New section only: background colour as hex, from the site\'s global colours (e.g. its off-white or white).',
+					),
+					'section_full_width' => array(
+						'type'        => 'boolean',
+						'description' => 'New section only: stretch the background edge to edge like the page\'s other sections (default true when section_background is set).',
+					),
+					'section_padding'    => array(
+						'type'        => 'integer',
+						'description' => 'New section only: space above and below in pixels (match the neighbouring sections, often 64 to 120).',
+					),
 					'approved'   => array(
 						'type'        => 'boolean',
 						'description' => 'Set true only after the person approved this exact code and placement.',

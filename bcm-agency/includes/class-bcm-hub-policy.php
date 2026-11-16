@@ -76,8 +76,12 @@ final class BCM_Hub_Policy {
 	/**
 	 * Skipped by the content scan. bcm/add-tracking-code accepts a pasted provider
 	 * snippet only to read the ID out of it, then writes the official code itself.
+	 * bcm/add-html-embed always needs Chris's confirmation of the exact code.
+	 * bcm/trash-post's only text is redirect_to, which the ability itself accepts
+	 * only as a path on the same site (its name would otherwise read as a form's
+	 * "redirect after submit" setting).
 	 */
-	const SCAN_EXEMPT_ABILITIES = array( 'bcm/add-tracking-code', 'bcm/add-html-embed' );
+	const SCAN_EXEMPT_ABILITIES = array( 'bcm/add-tracking-code', 'bcm/add-html-embed', 'bcm/trash-post' );
 
 	/**
 	 * Reviewed and allowed. Write abilities here still have their input scanned.

@@ -21,11 +21,23 @@ function bcm_agency_redirection_missing() {
 	return new WP_Error( 'bcm_no_redirection', 'The Redirection plugin is not active on this site. Install and activate it (wordpress.org/plugins/redirection), open Tools → Redirection once to finish its setup, then try again.' );
 }
 
-/** The first enabled group for ordinary WordPress redirects (Redirection's "Redirections" group). */
+/**
+ * The first enabled group for ordinary WordPress redirects (Redirection's
+ * "Redirections" group). When Redirection's tables exist but nobody has opened
+ * its setup screen yet, the group is created here exactly as that setup does.
+ */
 function bcm_agency_redirect_group() {
 	global $wpdb;
-	$id = $wpdb->get_var( "SELECT id FROM {$wpdb->prefix}redirection_groups WHERE module_id = 1 AND status = 'enabled' ORDER BY position ASC, id ASC LIMIT 1" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-	return $id ? (int) $id : 0;
+	$table = $wpdb->prefix . 'redirection_groups';
+	$id    = $wpdb->get_var( "SELECT id FROM {$table} WHERE module_id = 1 AND status = 'enabled' ORDER BY position ASC, id ASC LIMIT 1" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	if ( $id ) {
+		return (int) $id;
+	}
+	if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) || ! is_callable( array( 'Red_Group', 'create' ) ) ) {
+		return 0; // Redirection's tables are not set up: its setup screen must run first.
+	}
+	$group = Red_Group::create( 'Redirections', 1 );
+	return ( $group && is_callable( array( $group, 'get_id' ) ) ) ? (int) $group->get_id() : 0;
 }
 
 /** This site's host, without www. */
@@ -126,7 +138,7 @@ function bcm_agency_redirect_prepare( $source, $target, $code = 301 ) {
 	}
 	$group = bcm_agency_redirect_group();
 	if ( ! $group ) {
-		return new WP_Error( 'bcm_no_redirection', 'Redirection has no enabled group for WordPress redirects. Open Tools → Redirection once to finish its setup.' );
+		return new WP_Error( 'bcm_no_redirection', 'Redirection is installed but its database is not set up yet. Open Tools → Redirection once in wp-admin to finish its setup, then try again.' );
 	}
 	return array(
 		'source' => $source,
