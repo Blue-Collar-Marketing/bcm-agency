@@ -48,6 +48,8 @@ final class BCM_Hub_Policy {
 		'elementor/list-form-submissions',
 		// HTML or JavaScript placed on a page (Elementor HTML widget); Chris sees the exact code.
 		'bcm/add-html-embed',
+		// Elementor's V4 (Atomic) editor for the whole site: exactly Elementor's own opt-in.
+		'bcm/enable-atomic-editor',
 		// Site-wide settings.
 		'bcm/set-homepage',
 		'bcm/update-site-identity',
@@ -102,6 +104,7 @@ final class BCM_Hub_Policy {
 		'bcm/find-text',
 		'bcm/get-activity-log',
 		'bcm/get-atomic-image-fit',
+		'bcm/get-atomic-status',
 		'bcm/get-post',
 		'bcm/get-site-identity',
 		'bcm/list-categories',

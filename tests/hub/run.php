@@ -343,6 +343,15 @@ is_code( 'publish status through page settings: held', $r, 'bcm_hub_needs_confir
 is_code( 'other page settings: no confirmation', send( array( 'body' => run_body( 'elementor/update-page-settings', array( 'post_id' => 501, 'settings' => array( 'hide_title' => 'yes' ) ) ) ) ), 'ok' );
 $names = array_column( data( send( array( 'body' => array( 'action' => 'list' ) ) ) )['abilities'], 'tier', 'name' );
 t( 'bcm/add-html-embed needs confirmation', 'confirm' === $names['bcm/add-html-embed'] );
+t( 'bcm/enable-atomic-editor needs confirmation', 'confirm' === $names['bcm/enable-atomic-editor'] );
+t( 'bcm/get-atomic-status is allowed (read-only)', 'allowed' === $names['bcm/get-atomic-status'] );
+$r = send( array( 'body' => run_body( 'bcm/enable-atomic-editor', array( 'approved' => true ) ) ) );
+is_code( 'turning on V4: held for Slack approval', $r, 'bcm_hub_needs_confirmation' );
+t( 'turning on V4: reason says so', is_wp_error( $r ) && "it turns on Elementor's V4 (Atomic) editor for the whole site" === $r->get_error_data()['reason'] );
+$live_home_v4 = $GLOBALS['__options']['home'];
+$GLOBALS['__options']['home'] = 'https://wordpress-711989-6765152.cloudwaysapps.com';
+is_code( 'turning on V4: held on pre-launch sites too', send( array( 'host' => 'wordpress-711989-6765152.cloudwaysapps.com', 'body' => run_body( 'bcm/enable-atomic-editor', array( 'approved' => true ) ) ) ), 'bcm_hub_needs_confirmation' );
+$GLOBALS['__options']['home'] = $live_home_v4;
 foreach ( array( 'bcm/publish-post', 'bcm/schedule-post', 'bcm/trash-post', 'bcm/make-private', 'bcm/unpublish-post', 'bcm/add-redirect', 'bcm/remove-redirect', 'bcm/list-redirects' ) as $n ) {
 	t( "$n is allowed (the site decides per post)", 'allowed' === $names[ $n ] );
 }
@@ -399,7 +408,7 @@ t( 'list omits other families', ! isset( $names['core/get-site-info'] ) );
 t( 'list marks confirm tier', isset( $names['bcm/update-form-email'] ) && 'confirm' === $names['bcm/update-form-email'] && 'confirm' === $names['bcm/set-homepage'] );
 t( 'list includes list-tracking-codes (read-only)', isset( $names['bcm/list-tracking-codes'] ) && 'allowed' === $names['bcm/list-tracking-codes'] );
 t( 'list is sorted', $list && array_keys( $names ) === ( function ( $a ) { sort( $a ); return $a; } )( array_keys( $names ) ) );
-$all_real = array( 'add-gallery-image','add-gallery-tab','add-html-embed','add-list-item','add-menu-item','add-redirect','add-tracking-code','check-for-updates','create-post','create-term','find-images','find-text','get-activity-log','get-atomic-image-fit','get-post','get-site-identity','list-categories','list-forms','list-items','list-media','list-menus','list-posts','list-redirects','list-tracking-codes','make-private','publish-post','purge-page-cache','remove-gallery-image','remove-list-item','remove-menu-item','remove-redirect','remove-tracking-code','replace-image','replace-text','schedule-post','set-atomic-image-fit','set-homepage','set-page-layout','trash-post','unpublish-post','update-form-email','update-image-alt','update-menu-item','update-post','update-site-identity','upload-media' );
+$all_real = array( 'add-gallery-image','add-gallery-tab','add-html-embed','add-list-item','add-menu-item','add-redirect','add-tracking-code','check-for-updates','create-post','create-term','enable-atomic-editor','find-images','find-text','get-activity-log','get-atomic-image-fit','get-atomic-status','get-post','get-site-identity','list-categories','list-forms','list-items','list-media','list-menus','list-posts','list-redirects','list-tracking-codes','make-private','publish-post','purge-page-cache','remove-gallery-image','remove-list-item','remove-menu-item','remove-redirect','remove-tracking-code','replace-image','replace-text','schedule-post','set-atomic-image-fit','set-homepage','set-page-layout','trash-post','unpublish-post','update-form-email','update-image-alt','update-menu-item','update-post','update-site-identity','upload-media' );
 $unlisted = array();
 foreach ( $all_real as $n ) {
 	$tier = BCM_Hub_Policy::tier( 'bcm/' . $n, null );
@@ -407,9 +416,9 @@ foreach ( $all_real as $n ) {
 		$unlisted[] = $n;
 	}
 }
-t( 'all 46 bcm abilities have a reviewed tier', array() === $unlisted, implode( ', ', $unlisted ) );
+t( 'all 48 bcm abilities have a reviewed tier', array() === $unlisted, implode( ', ', $unlisted ) );
 $registered = array_filter( array_keys( $GLOBALS['__abilities'] ), function ( $n ) { return 0 === strpos( $n, 'bcm/' ); } );
-t( 'plugin registers exactly the 46 known bcm abilities', 46 === count( $registered ) && array() === array_diff( $registered, array_map( function ( $n ) { return 'bcm/' . $n; }, $all_real ) ) );
+t( 'plugin registers exactly the 48 known bcm abilities', 48 === count( $registered ) && array() === array_diff( $registered, array_map( function ( $n ) { return 'bcm/' . $n; }, $all_real ) ) );
 $info = data( send( array( 'body' => array( 'action' => 'info', 'ability' => 'bcm/update-post' ) ) ) );
 t( 'info returns schema and tier', $info && isset( $info['ability']['input_schema']['properties'] ) && 'allowed' === $info['ability']['tier'] );
 

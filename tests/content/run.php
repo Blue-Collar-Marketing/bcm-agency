@@ -61,6 +61,7 @@ function wp_update_post( $a, $err = false ) { $p = get_post( $a['ID'] ); foreach
 function wp_trash_post( $id ) { $p = get_post( $id ); $p->post_status = 'trash'; $p->post_name .= '__trashed'; return $p; }
 function current_time( $t, $gmt = false ) { return '2026-11-15 10:00:00'; }
 function bcm_agency_purge_page_cache() { return array( 'test' ); }
+function update_option( $k, $v ) { $GLOBALS['options'][ $k ] = $v; return true; }
 function add_action() {}
 class BCM_Hub { public static function running() { return $GLOBALS['hub_running']; } public static function running_confirmed() { return $GLOBALS['hub_running'] && $GLOBALS['hub_confirmed']; } }
 
@@ -94,6 +95,7 @@ $GLOBALS['wpdb'] = new Fake_WPDB();
 
 $plugin = dirname( __DIR__, 2 ) . '/bcm-agency/includes';
 require $plugin . '/helpers.php';
+require $plugin . '/abilities-elementor.php';
 require $plugin . '/abilities-posts.php';
 require $plugin . '/abilities-redirects.php';
 require $plugin . '/abilities-content.php';
@@ -348,6 +350,39 @@ t( 'embed: PHP refused', 'bcm_bad_input' === code( bcm_agency_add_html_embed( ar
 t( 'embed: over 100 KB refused', 'bcm_bad_input' === code( bcm_agency_add_html_embed( array( 'post_id' => 50, 'html' => str_repeat( 'a', 102401 ), 'approved' => true ) ) ) );
 t( 'embed: non-Elementor page refused', 'bcm_not_elementor' === code( bcm_agency_add_html_embed( array( 'post_id' => 21, 'html' => $code, 'approved' => true ) ) ) );
 t( 'embed: nothing changed by refusals', $data() === $tree );
+
+// --- Elementor V4 (Atomic) editor (1.4.7) ------------------------------------------------
+t( 'V4: no Elementor, clear message', 'bcm_no_elementor' === code( bcm_agency_get_atomic_status( array() ) ) && 'bcm_no_elementor' === code( bcm_agency_enable_atomic_editor( array( 'approved' => true ) ) ) );
+class Fake_Experiments {
+	public $known = array(); public $state = array(); public $throw = false;
+	public function get_features( $n = null ) { return in_array( $n, $this->known, true ) ? array( 'name' => $n ) : null; }
+	public function is_feature_active( $n ) { return ! empty( $this->state[ $n ] ); }
+	public function set_feature_state( $n, $st ) { if ( $this->throw ) { throw new Exception( 'dependency missing' ); } $this->state[ $n ] = ( 'active' === $st ); }
+}
+eval( 'namespace Elementor; class Plugin { public static $instance; }' );
+$exp = new Fake_Experiments();
+\Elementor\Plugin::$instance = (object) array( 'experiments' => $exp );
+$exp->known = array( 'e_opt_in_v4', 'container', 'e_classes' ); // An older Elementor: no Atomic elements yet.
+$st = bcm_agency_get_atomic_status( array() );
+t( 'V4: older Elementor reported as not offering V4', false === $st['atomic_editor_on'] && null === $st['features']['e_atomic_elements'] && false !== strpos( $st['note'], 'Update Elementor' ) );
+t( 'V4: older Elementor refused, nothing changed', 'bcm_v4_unavailable' === code( bcm_agency_enable_atomic_editor( array( 'approved' => true ) ) ) && array() === $exp->state );
+$exp->known = array( 'e_opt_in_v4', 'container', 'e_atomic_elements', 'e_classes', 'e_variables' );
+$exp->state = array( 'container' => true, 'e_classes' => false, 'e_variables' => false );
+$st = bcm_agency_get_atomic_status( array() );
+t( 'V4: off reported, per feature', false === $st['atomic_editor_on'] && true === $st['features']['container'] && false === $st['features']['e_opt_in_v4'] );
+t( 'V4: needs approval, nothing changed', 'bcm_needs_approval' === code( bcm_agency_enable_atomic_editor( array() ) ) && empty( $exp->state['e_opt_in_v4'] ) );
+$r = bcm_agency_enable_atomic_editor( array( 'approved' => true ) );
+t( 'V4: fallback turns on exactly the three V4 features', 'ok' === code( $r ) && 'experiments_manager' === $r['_log']['how'] && $exp->state['e_opt_in_v4'] && $exp->state['container'] && $exp->state['e_atomic_elements'] && false === $exp->state['e_classes'] && false === $exp->state['e_variables'] && true === $GLOBALS['options']['elementor_v4_opt_in_clicked'], json_encode( $exp->state ) );
+t( 'V4: already on, no change', 'bcm_no_change' === code( bcm_agency_enable_atomic_editor( array( 'approved' => true ) ) ) && true === bcm_agency_get_atomic_status( array() )['atomic_editor_on'] );
+eval( 'namespace Elementor\Modules\AtomicWidgets\OptIn; class Opt_In { public function opt_in_v4() { $GLOBALS["opt_in_called"] = true; foreach ( array( "e_opt_in_v4", "container", "e_atomic_elements" ) as $f ) { \\Elementor\\Plugin::$instance->experiments->set_feature_state( $f, "active" ); } update_option( "elementor_v4_opt_in_clicked", true ); } }' );
+$exp->state = array( 'container' => false, 'e_classes' => false );
+$r = bcm_agency_enable_atomic_editor( array( 'approved' => true ) );
+t( 'V4: uses Elementor\'s own opt-in when present', 'ok' === code( $r ) && ! empty( $GLOBALS['opt_in_called'] ) && 'elementor_opt_in' === $r['_log']['how'] && false === $exp->state['e_classes'] );
+$exp->state = array();
+$exp->throw = true;
+$r = bcm_agency_enable_atomic_editor( array( 'approved' => true ) );
+t( 'V4: Elementor refusing is reported, not hidden', 'bcm_v4_failed' === code( $r ) && false !== strpos( $r->message, 'dependency missing' ) );
+$exp->throw = false;
 
 echo "\n{$pass} passed, {$fail} failed\n";
 exit( $fail ? 1 : 0 );
