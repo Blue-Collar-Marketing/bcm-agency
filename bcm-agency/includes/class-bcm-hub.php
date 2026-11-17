@@ -320,6 +320,8 @@ final class BCM_Hub {
 				$why = $scan['reason'];
 			} elseif ( 'bcm/add-html-embed' === $name ) {
 				$why = 'it adds HTML or JavaScript code to a page';
+			} elseif ( 'bcm/enable-atomic-editor' === $name ) {
+				$why = "it turns on Elementor's V4 (Atomic) editor for the whole site";
 			} elseif ( 'bcm/update-form-email' === $name ) {
 				$why = 'it changes where a form sends its emails';
 			} elseif ( 'bcm/add-tracking-code' === $name ) {
